@@ -1,0 +1,8 @@
+{
+  "name": "Club Scout DB",
+  "description": "Responsive scouting and recruitment web app for football clubs, featuring player tracking, reports, and multimedia management.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
