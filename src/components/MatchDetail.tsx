@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus, UserMinus } from 'lucide-react';
 import { Match, Player, Report, Video } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -12,6 +12,8 @@ interface MatchDetailProps {
   videos: Video[];
   onBack: () => void;
   onAddPlayer: () => void;
+  onLinkPlayer: () => void;
+  onUnlinkPlayer: (playerId: string) => void;
   onCreateReport: (playerId: string, mode: 'RAPID' | 'COMPLETE') => void;
   onAddVideo: (video: Partial<Video>) => void;
   onSelectPlayer: (player: Player) => void;
@@ -24,6 +26,8 @@ export function MatchDetail({
   videos, 
   onBack, 
   onAddPlayer, 
+  onLinkPlayer,
+  onUnlinkPlayer,
   onCreateReport, 
   onAddVideo,
   onSelectPlayer 
@@ -132,8 +136,19 @@ export function MatchDetail({
                       onCreateReport(player.id, 'RAPID');
                     }}
                     className="p-2 text-slate-400 hover:text-emerald-500 bg-slate-950 border border-slate-800 rounded-xl transition-all"
+                    title="Crear informe"
                   >
                     <FileText size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnlinkPlayer(player.id);
+                    }}
+                    className="p-2 text-slate-600 hover:text-red-500 bg-slate-950 border border-slate-800 rounded-xl transition-all"
+                    title="Desvincular jugador"
+                  >
+                    <UserMinus size={18} />
                   </button>
                   <ChevronRight size={20} className="text-slate-700 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
                 </div>
@@ -142,7 +157,7 @@ export function MatchDetail({
                 <div className="col-span-full py-12 text-center bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-3xl">
                   <UserPlus size={48} className="mx-auto text-slate-800 mb-4" />
                   <p className="text-slate-500 font-bold">No hay jugadores vinculados a este partido</p>
-                  <button onClick={onAddPlayer} className="mt-4 text-emerald-500 font-black text-xs hover:underline">Vincular primer jugador</button>
+                  <button onClick={onLinkPlayer} className="mt-4 text-emerald-500 font-black text-xs hover:underline">Vincular primer jugador</button>
                 </div>
               )}
             </div>

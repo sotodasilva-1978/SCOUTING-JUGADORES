@@ -6,8 +6,6 @@
 
 This contains everything you need to run your app locally.
 
-View your app in AI Studio: https://ai.studio/apps/96b644f7-df82-41d9-99f6-33887768fdd9
-
 ## Run Locally
 
 **Prerequisites:**  Node.js
@@ -15,6 +13,15 @@ View your app in AI Studio: https://ai.studio/apps/96b644f7-df82-41d9-99f6-33887
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Create `.env.local` and configure:
+
+```env
+GEMINI_API_KEY=your-gemini-key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+3. Run `supabase_schema.sql` in Supabase SQL Editor.
+4. If your database already existed before the "Perfil Futbolistico" changes, also run `perfil_futbolistico_migration.sql`.
+5. Run the app:
    `npm run dev`

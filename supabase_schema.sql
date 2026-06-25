@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS players (
   rating_tactical DECIMAL DEFAULT 3,
   rating_physical DECIMAL DEFAULT 3,
   rating_mental DECIMAL DEFAULT 3,
+  rating_competitive DECIMAL DEFAULT 0,
+  rating_decision_making DECIMAL DEFAULT 0,
+  rating_pace DECIMAL DEFAULT 0,
+  rating_intelligence DECIMAL DEFAULT 0,
+  rating_personality DECIMAL DEFAULT 0,
+  rating_potential DECIMAL DEFAULT 0,
   
   -- Detailed Physical Ratings
   rating_velo_despl DECIMAL DEFAULT 0,
@@ -342,3 +348,8 @@ DROP POLICY IF EXISTS "Allow public insert on reports" ON reports;
 CREATE POLICY "Allow public insert on reports" ON reports FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update on reports" ON reports;
 CREATE POLICY "Allow public update on reports" ON reports FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Allow public read on history_logs" ON history_logs;
+CREATE POLICY "Allow public read on history_logs" ON history_logs FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow public insert on history_logs" ON history_logs;
+CREATE POLICY "Allow public insert on history_logs" ON history_logs FOR INSERT WITH CHECK (true);

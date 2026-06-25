@@ -12,27 +12,27 @@ export function formatRating(rating?: number) {
 
 export function getStatusColor(status: string) {
   const colors: Record<string, string> = {
-    'NEW': 'bg-blue-500',
-    'PENDING_VALIDATION': 'bg-yellow-500',
-    'VALIDATED': 'bg-green-500',
-    'TRACKING': 'bg-indigo-500',
-    'OBSERVED': 'bg-cyan-500',
-    'INTERESTING': 'bg-teal-500',
-    'VERY_INTERESTING': 'bg-emerald-500',
-    'PRIORITY': 'bg-orange-500 text-white shadow-lg shadow-orange-500/20',
-    'CONTACTED': 'bg-purple-500',
-    'ON_TRIAL': 'bg-pink-500',
-    'SIGNED': 'bg-rose-600',
-    'DISCARDED': 'bg-gray-500 text-slate-300',
-    'NOT_AVAILABLE': 'bg-slate-400',
+    'NEW': 'bg-slate-500 text-white',
+    'PENDING_VALIDATION': 'bg-slate-600 text-white',
+    'VALIDATED': 'bg-blue-500 text-white',
+    'TRACKING': 'bg-amber-500 text-white',
+    'OBSERVED': 'bg-cyan-500 text-white',
+    'INTERESTING': 'bg-amber-400 text-slate-900',
+    'VERY_INTERESTING': 'bg-emerald-400 text-slate-900',
+    'PRIORITY': 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20',
+    'CONTACTED': 'bg-purple-500 text-white',
+    'ON_TRIAL': 'bg-purple-600 text-white',
+    'SIGNED': 'bg-green-600 text-white',
+    'DISCARDED': 'bg-rose-500 text-white',
+    'NOT_AVAILABLE': 'bg-slate-400 text-white',
   };
-  return colors[status] || 'bg-gray-400';
+  return colors[status] || 'bg-gray-400 text-white';
 }
 
 export function getStatusLabel(status: string) {
   const labels: Record<string, string> = {
     'NEW': 'NUEVO',
-    'PENDING_VALIDATION': 'PENDIENTE',
+    'PENDING_VALIDATION': 'VALIDACIÓN',
     'VALIDATED': 'VALIDADO',
     'TRACKING': 'SEGUIMIENTO',
     'OBSERVED': 'OBSERVADO',
@@ -40,10 +40,10 @@ export function getStatusLabel(status: string) {
     'VERY_INTERESTING': 'MUY INTERESANTE',
     'PRIORITY': 'PRIORIDAD',
     'CONTACTED': 'CONTACTADO',
-    'ON_TRIAL': 'A PRUEBA',
+    'ON_TRIAL': 'PRUEBA',
     'SIGNED': 'FICHADO',
     'DISCARDED': 'DESCARTADO',
-    'NOT_AVAILABLE': 'NO DISPONIBLE',
+    'NOT_AVAILABLE': 'INDISPONIBLE',
   };
   return labels[status] || status;
 }
@@ -78,12 +78,30 @@ export function sortPositions(positions: string[]): string[] {
   });
 }
 
+/**
+ * Calcula la edad exacta teniendo en cuenta si el cumpleaños ya pasó este año.
+ * - Si se tiene birth_date (YYYY-MM-DD) usa día y mes exactos.
+ * - Si solo hay birth_year usa la diferencia de años (aproximación ±0).
+ */
+export function computeAge(birthDate?: string | null, birthYear?: number | null): number | undefined {
+  const today = new Date();
+
+  if (birthDate) {
+    const bd = new Date(birthDate);
+    if (isNaN(bd.getTime())) return birthYear ? today.getFullYear() - birthYear : undefined;
+    let age = today.getFullYear() - bd.getFullYear();
+    const monthDiff = today.getMonth() - bd.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bd.getDate())) age--;
+    return age;
+  }
+
+  if (birthYear) return today.getFullYear() - birthYear;
+  return undefined;
+}
+
 export function calculateCategory(birthYear: number): string {
   if (!birthYear) return 'SIN REGISTRO';
-  
-  const currentYear = 2026; // System reference year
-  const age = currentYear - birthYear;
-
+  const age = new Date().getFullYear() - birthYear;
   if (age >= 19) return 'SENIOR';
   if (age >= 16) return 'JUVENIL';
   if (age >= 14) return 'CADETE';
@@ -91,6 +109,5 @@ export function calculateCategory(birthYear: number): string {
   if (age >= 10) return 'ALEVÍN';
   if (age >= 8) return 'BENJAMÍN';
   if (age >= 6) return 'PRE-BENJAMÍN';
-  
   return 'DEBUTANTE';
 }

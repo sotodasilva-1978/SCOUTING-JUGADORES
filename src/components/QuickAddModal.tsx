@@ -4,6 +4,20 @@ import React, { useState } from 'react';
 import { cn } from '../lib/utils';
 import { Match } from '../types';
 
+const POSITION_OPTIONS = [
+  { value: 'POR', label: 'POR - Portero' },
+  { value: 'DFC', label: 'DFC - Defensa Central' },
+  { value: 'LD', label: 'LD - Lateral Derecho' },
+  { value: 'LI', label: 'LI - Lateral Izquierdo' },
+  { value: 'MCD', label: 'MCD - Mediocentro Defensivo' },
+  { value: 'MC', label: 'MC - Mediocentro' },
+  { value: 'MCO', label: 'MCO - Mediapunta' },
+  { value: 'ED', label: 'ED - Extremo Derecho' },
+  { value: 'EI', label: 'EI - Extremo Izquierdo' },
+  { value: 'SD', label: 'SD - Segunda Delantero' },
+  { value: 'DC', label: 'DC - Delantero Centro' },
+];
+
 interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -178,12 +192,17 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
 
                 <div>
                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Posición Principal</label>
-                   <input
+                   <select
                     required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-emerald-500/50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none appearance-none focus:border-emerald-500/50"
                     value={formData.position}
                     onChange={(e) => setFormData({...formData, position: e.target.value})}
-                  />
+                  >
+                    <option value="">Seleccionar posición...</option>
+                    {POSITION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -207,10 +226,18 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
                     value={formData.status}
                     onChange={(e) => setFormData({...formData, status: e.target.value as any})}
                   >
-                    <option value="NEW">Nuevo</option>
-                    <option value="PENDING_VALIDATION">Pendiente Validar</option>
-                    <option value="TRACKING">En Seguimiento</option>
-                    <option value="PRIORITY">PRIORITARIO</option>
+                    <option value="">Seleccionar estado...</option>
+                    <option value="NUEVO">Nuevo</option>
+                    <option value="PRIORIDAD">Prioridad</option>
+                    <option value="EN_SEGUIMIENTO">En Seguimiento</option>
+                    <option value="DESCARTADO">Descartado</option>
+                    <option value="OBSERVADO">Observado</option>
+                    <option value="INTERESANTE">Interesante</option>
+                    <option value="MUY_INTERESANTE">Muy Interesante</option>
+                    <option value="CONTACTADO">Contactado</option>
+                    <option value="EN_PRUEBA">En Prueba</option>
+                    <option value="FICHADO">Fichado</option>
+                    <option value="NO_DISPONIBLE">No Disponible</option>
                   </select>
                 </div>
               </div>

@@ -28,7 +28,11 @@ export function SettingsPanel() {
 
   const loadSettings = async () => {
     try {
-      const { data: club } = await supabase.from('clubs').select('*').limit(1).single();
+      const { data: club } = await supabase
+        .from('clubs')
+        .select('*')
+        .eq('name', 'U.D. SANTA MARIÑA')
+        .single();
       if (club) {
         setClubId(club.id);
         setClubName(club.name);

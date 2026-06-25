@@ -11,6 +11,9 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Serve local assets folder
+  app.use('/assets', express.static(path.join(process.cwd(), 'assets')));
+
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });

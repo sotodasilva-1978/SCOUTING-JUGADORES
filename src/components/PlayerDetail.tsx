@@ -7,10 +7,10 @@ import {
   LayoutDashboard, Smartphone, Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Player, Report, Match, Video as VideoType, TrajectoryEntry } from '../types';
+import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/utils';
 import { useMemo, useState, useRef, ChangeEvent, FormEvent } from 'react';
-import imageCompression from 'browser-image-compression';
+import { uploadPlayerPhoto } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -72,28 +72,135 @@ const RATING_CATEGORIES = {
   ]
 };
 
-const PitchMap = ({ position }: { position: string }) => (
-  <div className="relative w-full aspect-[3/4] bg-emerald-950/40 rounded-2xl border border-emerald-500/20 overflow-hidden shadow-inner group">
+// ── Atributos específicos de PORTERO (reusan campos existentes con etiqueta GK) ──
+const GK_RATING_CATEGORIES = {
+  bajo_palos: {
+    label: 'BAJO PALOS',
+    color: { header: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400', bar: 'bg-cyan-500', text: 'text-cyan-400' },
+    attrs: [
+      { label: 'Reflejos',            field: 'rating_velo_reac',  tooltip: 'Velocidad de reacción ante el disparo.' },
+      { label: 'Agilidad bajo palos', field: 'rating_agil',       tooltip: 'Capacidad de desplazarse y cubrir el ángulo.' },
+      { label: 'Colocación / posición', field: 'rating_posic',    tooltip: 'Posicionamiento óptimo según el peligro.' },
+      { label: 'Potencia de salto',   field: 'rating_poten',      tooltip: 'Explosividad en el salto para cubrir el arco.' },
+      { label: 'Coordinación',        field: 'rating_coord',      tooltip: 'Sincronía de cuerpo y manos en la parada.' },
+    ],
+  },
+  con_balon: {
+    label: 'CON EL BALÓN',
+    color: { header: 'bg-blue-500/10 border-blue-500/20 text-blue-400', bar: 'bg-blue-500', text: 'text-blue-400' },
+    attrs: [
+      { label: 'Juego pie (corto)',     field: 'rating_pase_corto',    tooltip: 'Construcción en corto con el pie.' },
+      { label: 'Saque largo / distrib.', field: 'rating_pase_largo',  tooltip: 'Precisión en envíos largos para iniciar jugada.' },
+      { label: 'Control / amortiguación', field: 'rating_ctrl_balon', tooltip: 'Calidad del primer toque en balones en juego.' },
+      { label: 'Despeje / puñetazo',   field: 'rating_despeje',       tooltip: 'Calidad del despeje bajo presión.' },
+      { label: 'Pierna no dominante',  field: 'rating_pierna_menos',  tooltip: 'Pie contrario en situaciones de construcción.' },
+    ],
+  },
+  salidas_aereo: {
+    label: 'SALIDAS Y AÉREO',
+    color: { header: 'bg-violet-500/10 border-violet-500/20 text-violet-400', bar: 'bg-violet-500', text: 'text-violet-400' },
+    attrs: [
+      { label: 'Dominio del área',    field: 'rating_juego_aereo',   tooltip: 'Reclamación segura de centros y balones divididos.' },
+      { label: 'Lectura de salidas',  field: 'rating_dom_espacios',  tooltip: 'Capacidad de leer cuándo salir o quedarse.' },
+      { label: 'Posición en 1vs1',    field: 'rating_marcajes',      tooltip: 'Posicionamiento ante remates en mano a mano.' },
+      { label: 'Fortaleza en choques', field: 'rating_fuerza',       tooltip: 'Resistencia física en salidas con contacto.' },
+      { label: 'Resistencia / concentración', field: 'rating_resis', tooltip: 'Mantener el nivel y foco los 90 minutos.' },
+    ],
+  },
+  mental_liderazgo: {
+    label: 'MENTAL Y LIDERAZGO',
+    color: { header: 'bg-amber-500/10 border-amber-500/20 text-amber-400', bar: 'bg-amber-500', text: 'text-amber-400' },
+    attrs: [
+      { label: 'Liderazgo defensivo', field: 'rating_liderazgo',    tooltip: 'Capacidad de organizar y dirigir la línea defensiva.' },
+      { label: 'Comunicación',        field: 'rating_comunicacion', tooltip: 'Órdenes verbales claras y constantes a la defensa.' },
+      { label: 'Mentalidad / foco',   field: 'rating_mentalidad',   tooltip: 'Concentración y respuesta tras encajar un gol.' },
+      { label: 'Competitividad',      field: 'rating_competitiv',   tooltip: 'Actitud ante la adversidad y situaciones de tensión.' },
+      { label: 'Personalidad',        field: 'rating_personalidad', tooltip: 'Seguridad en sí mismo y presencia en el campo.' },
+    ],
+  },
+} as const;
+
+const POSITION_OPTIONS = [
+  { value: 'POR', label: 'POR - Portero' },
+  { value: 'DFC', label: 'DFC - Defensa Central' },
+  { value: 'LD', label: 'LD - Lateral Derecho' },
+  { value: 'LI', label: 'LI - Lateral Izquierdo' },
+  { value: 'MCD', label: 'MCD - Mediocentro Defensivo' },
+  { value: 'MC', label: 'MC - Mediocentro' },
+  { value: 'MCO', label: 'MCO - Mediapunta' },
+  { value: 'ED', label: 'ED - Extremo Derecho' },
+  { value: 'EI', label: 'EI - Extremo Izquierdo' },
+  { value: 'SD', label: 'SD - Segunda Delantero' },
+  { value: 'DC', label: 'DC - Delantero Centro' },
+];
+
+const PLAYER_STATUS_OPTIONS = [
+  { value: 'NEW', label: 'Nuevo' },
+  { value: 'PENDING_VALIDATION', label: 'Pendiente Validación' },
+  { value: 'VALIDATED', label: 'Validado' },
+  { value: 'TRACKING', label: 'En Seguimiento' },
+  { value: 'INTERESTING', label: 'Interesante' },
+  { value: 'VERY_INTERESTING', label: 'Muy Interesante' },
+  { value: 'PRIORITY', label: 'Prioridad' },
+  { value: 'CONTACTED', label: 'Contactado' },
+  { value: 'ON_TRIAL', label: 'En Prueba' },
+  { value: 'SIGNED', label: 'Fichado' },
+  { value: 'DISCARDED', label: 'Descartado' },
+];
+
+type PosData = {
+  top?: string; bottom?: string;
+  left?: string; right?: string;
+  centerX?: boolean; centerY?: boolean;
+};
+
+const POSITION_DATA: Record<string, PosData> = {
+  DC:  { top: '13%',   left: '50%',  centerX: true               },
+  ED:  { top: '23%',   right: '12%'                              },
+  EI:  { top: '23%',   left: '12%'                               },
+  SD:  { top: '28%',   left: '50%',  centerX: true               },
+  MCO: { top: '38%',   left: '50%',  centerX: true               },
+  MC:  { top: '50%',   left: '50%',  centerX: true, centerY: true },
+  MCD: { top: '58%',   left: '50%',  centerX: true               },
+  LD:  { bottom: '28%', right: '12%'                             },
+  LI:  { bottom: '28%', left: '12%'                              },
+  DFC: { bottom: '16%', left: '50%', centerX: true               },
+  POR: { bottom: '5%',  left: '50%', centerX: true               },
+};
+
+const makeDotStyle = (pos: string) => {
+  const p = POSITION_DATA[pos];
+  if (!p) return {};
+  const tx = p.centerX ? '-50%' : undefined;
+  const ty = p.centerY ? '-50%' : undefined;
+  const transform = [tx && `translateX(${tx})`, ty && `translateY(${ty})`]
+    .filter(Boolean).join(' ') || undefined;
+  return { top: p.top, bottom: p.bottom, left: p.left, right: p.right, transform };
+};
+
+const PitchMap = ({ position, secondaryPositions = [] }: { position: string; secondaryPositions?: string[] }) => (
+  <div className="relative w-full max-w-[180px] mx-auto aspect-[3/4] bg-emerald-950/40 rounded-2xl border border-emerald-500/20 overflow-hidden shadow-inner group">
     {/* Field markings */}
     <div className="absolute inset-0 border-[1.5px] border-white/20 m-3 rounded-lg" />
     <div className="absolute top-1/2 left-0 right-0 h-px bg-white/20" />
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-[1.5px] border-white/20 rounded-full" />
-    
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-12 border-x-[1.5px] border-b-[1.5px] border-white/20" />
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-24 h-12 border-x-[1.5px] border-t-[1.5px] border-white/20" />
-    
-    {/* Dot for position */}
-    <div className={cn(
-      "absolute w-5 h-5 rounded-full bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)] border-2 border-white/50 transition-all duration-700",
-      position === 'DC' ? 'top-[15%] left-1/2 -translate-x-1/2' :
-      position === 'ED' ? 'top-[25%] right-[15%]' :
-      position === 'EI' ? 'top-[25%] left-[15%]' :
-      position === 'MCO' ? 'top-[35%] left-1/2 -translate-x-1/2' :
-      position === 'MC' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' :
-      position === 'DFC' ? 'bottom-[15%] left-1/2 -translate-x-1/2' :
-      position === 'POR' ? 'bottom-[5%] left-1/2 -translate-x-1/2' :
-      'top-1/2 left-1/2'
-    )} />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 border-[1.5px] border-white/20 rounded-full" />
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 w-16 h-9 border-x-[1.5px] border-b-[1.5px] border-white/20" />
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-16 h-9 border-x-[1.5px] border-t-[1.5px] border-white/20" />
+
+    {/* Secondary position dots — yellow, smaller */}
+    {(secondaryPositions || []).filter(Boolean).map((pos, i) => (
+      <div
+        key={i}
+        className="absolute w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)] border border-white/70 transition-all duration-700"
+        style={makeDotStyle(pos)}
+      />
+    ))}
+
+    {/* Main position dot — red, larger */}
+    <div
+      className="absolute w-5 h-5 rounded-full bg-red-500 shadow-[0_0_16px_rgba(239,68,68,0.8)] border-2 border-white/60 transition-all duration-700"
+      style={makeDotStyle(position)}
+    />
 
     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
   </div>
@@ -104,6 +211,7 @@ interface PlayerDetailProps {
   reports: Report[];
   matches: Match[];
   videos: VideoType[];
+  history: HistoryLog[];
   onBack: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -118,6 +226,7 @@ export function PlayerDetail({
   reports, 
   matches, 
   videos, 
+  history, 
   onBack, 
   onDelete, 
   onEdit, 
@@ -131,43 +240,58 @@ export function PlayerDetail({
   const [formData, setFormData] = useState<Partial<Player>>({ ...player });
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<'idle' | 'compressing' | 'uploading' | 'done' | 'error'>('idle');
+  const [uploadError, setUploadError] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    // Reset input para permitir subir la misma imagen de nuevo
+    event.target.value = '';
+    setUploadError('');
 
-    setIsCompressing(true);
-    const options = {
-      maxSizeMB: 0.1,
-      maxWidthOrHeight: 800,
-      useWebWorker: true,
-    };
-
+    setUploadPhase('compressing');
     try {
-      const compressedFile = await imageCompression(file, options);
-      const reader = new FileReader();
-      reader.readAsDataURL(compressedFile);
-      reader.onloadend = () => {
-        const base64data = reader.result as string;
-        if (onUpdatePlayer) {
-          onUpdatePlayer({ ...player, avatar_url: base64data });
+      const publicUrl = await uploadPlayerPhoto(
+        player.id,
+        file,
+        (phase, detail) => {
+          setUploadPhase(phase);
+          if (phase === 'error' && detail) setUploadError(detail);
         }
-        setIsCompressing(false);
-      };
-    } catch (error) {
-      console.error("Error compressing image:", error);
-      setIsCompressing(false);
+      );
+
+      if (publicUrl && onUpdatePlayer) {
+        onUpdatePlayer({ ...player, avatar_url: publicUrl });
+        setTimeout(() => setUploadPhase('idle'), 2000);
+      } else if (!publicUrl) {
+        setUploadPhase('error');
+        setTimeout(() => setUploadPhase('idle'), 4000);
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error('Error al subir foto:', msg);
+      setUploadError(msg);
+      setUploadPhase('error');
+      setTimeout(() => setUploadPhase('idle'), 4000);
     }
   };
 
   const getTrafficLightColor = (status: string) => {
     switch (status) {
       case 'PRIORITY': return 'bg-emerald-500';
+      case 'VERY_INTERESTING': return 'bg-emerald-400';
+      case 'INTERESTING': return 'bg-amber-400';
       case 'TRACKING': return 'bg-amber-500';
+      case 'VALIDATED': return 'bg-blue-500';
+      case 'CONTACTED': return 'bg-purple-500';
+      case 'ON_TRIAL': return 'bg-purple-600';
+      case 'SIGNED': return 'bg-green-600';
       case 'DISCARDED': return 'bg-rose-500';
+      case 'PENDING_VALIDATION': return 'bg-slate-600';
+      case 'NEW': return 'bg-slate-500';
       default: return 'bg-slate-500';
     }
   };
@@ -231,9 +355,11 @@ export function PlayerDetail({
               {verificationOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           ) : (
-            <span className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded", getVerificationColor(status))}>
-              {getVerificationLabel(status)}
-            </span>
+            status !== 'NOT_REGISTERED' && (
+              <span className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded", getVerificationColor(status))}>
+                {getVerificationLabel(status)}
+              </span>
+            )
           )}
         </div>
 
@@ -261,7 +387,11 @@ export function PlayerDetail({
           )
         ) : (
           <p className="text-sm font-bold text-slate-200 truncate">
-            {isArray ? (value as string[] || []).join(', ') : (value || 'No registrado')}
+            {isArray
+              ? (value as string[] || []).join(', ') || '—'
+              : type === 'select'
+                ? (options?.find(o => o.value === (value as string))?.label ?? (value as string) ?? '—')
+                : (value as string) || '—'}
           </p>
         )}
       </div>
@@ -298,6 +428,32 @@ export function PlayerDetail({
               />
             ))}
           </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPositionSelectField = (label: string, index: number) => {
+    const value = (formData.secondary_positions || [])[index] || '';
+    return (
+      <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3 relative group">
+        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+        {editMode ? (
+          <select
+            value={value}
+            onChange={(e) => {
+              const newPositions = [...(formData.secondary_positions || [])];
+              newPositions[index] = e.target.value;
+              while (newPositions.length > 0 && !newPositions[newPositions.length - 1]) newPositions.pop();
+              setFormData(prev => ({ ...prev, secondary_positions: newPositions }));
+            }}
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50 appearance-none"
+          >
+            <option value="">— Sin posición —</option>
+            {POSITION_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        ) : (
+          <p className="text-sm font-bold text-slate-200 truncate">{value || 'No registrado'}</p>
         )}
       </div>
     );
@@ -358,11 +514,21 @@ export function PlayerDetail({
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="relative">
-              <div className="w-20 h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-3xl text-emerald-500 shadow-2xl overflow-hidden">
+            <div className="relative group/avatar">
+              <div
+                className="w-20 h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-3xl text-emerald-500 shadow-2xl overflow-hidden cursor-pointer"
+                onClick={() => uploadPhase === 'idle' && fileInputRef.current?.click()}
+                title="Haz clic para cambiar la foto"
+              >
                 {player.avatar_url ? (
-                  <img src={player.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : player.full_name[0]}
+                  <img src={player.avatar_url} alt={player.full_name} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{player.full_name[0]}</span>
+                )}
+                {/* Overlay al hover */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex items-center justify-center">
+                  <ImageIcon size={20} className="text-white" />
+                </div>
               </div>
               <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(player.status))} />
             </div>
@@ -370,7 +536,7 @@ export function PlayerDetail({
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-black text-white uppercase tracking-tighter">{player.full_name}</h1>
                 <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.2em] shadow-sm", getStatusColor(player.status))}>
-                   {player.status.replace('_', ' ')}
+                   {PLAYER_STATUS_OPTIONS.find(o => o.value === player.status)?.label || player.status}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 text-sm font-bold">
@@ -430,17 +596,21 @@ export function PlayerDetail({
               />
              <button 
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isCompressing}
-                className="bg-slate-900 border border-slate-800 text-slate-400 px-4 py-2.5 rounded-xl text-[10px] font-black hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isCompressing ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
-                    PROCESANDO...
-                  </>
-                ) : (
-                  'IMAGEN'
+                disabled={uploadPhase !== 'idle'}
+                title="Subir foto del jugador (se comprime automáticamente)"
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center gap-2 border",
+                  uploadPhase === 'idle' && "bg-slate-900 border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30",
+                  (uploadPhase === 'compressing' || uploadPhase === 'uploading') && "bg-slate-900 border-slate-700 text-emerald-400 opacity-80 cursor-not-allowed",
+                  uploadPhase === 'done' && "bg-emerald-500/10 border-emerald-500/40 text-emerald-400",
+                  uploadPhase === 'error' && "bg-rose-500/10 border-rose-500/40 text-rose-400"
                 )}
+              >
+                {uploadPhase === 'compressing' && (<><Loader2 className="w-3 h-3 animate-spin" />COMPRIMIENDO...</>)}
+                {uploadPhase === 'uploading'   && (<><Loader2 className="w-3 h-3 animate-spin" />SUBIENDO...</>)}
+                {uploadPhase === 'done'        && (<><CheckCircle2 className="w-3 h-3" />FOTO SUBIDA</>)}
+                {uploadPhase === 'error'       && (<><XCircle className="w-3 h-3" /><span className="max-w-[160px] truncate" title={uploadError}>ERROR{uploadError ? `: ${uploadError}` : ''}</span></>)}
+                {uploadPhase === 'idle'        && (<><ImageIcon className="w-3 h-3" />SUBIR FOTO</>)}
               </button>
           </div>
         </div>
@@ -572,7 +742,7 @@ export function PlayerDetail({
                               <div className="w-full h-full flex items-center justify-center text-6xl font-black text-slate-700">{player.full_name[0]}</div>
                             )}
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-4">
-                               <span className="text-[10px] font-black text-white italic tracking-widest uppercase">SCOUT PROFILE</span>
+                               <span className="text-[10px] font-black text-white italic tracking-widest uppercase">PERFIL SCOUTING</span>
                             </div>
                          </div>
                          
@@ -584,7 +754,7 @@ export function PlayerDetail({
                               { label: 'POSICIÓN', value: player.main_position },
                               { label: 'LATERALIDAD', value: player.lateralidad || (player.dominant_foot === 'RIGHT' ? 'Diestro' : player.dominant_foot === 'LEFT' ? 'Zurdo' : player.dominant_foot === 'BOTH' ? 'Ambidiestro' : 'Desconocido') },
                               { label: 'NACIONALIDAD', value: player.nationality },
-                              { label: 'FECHA NACIMIENTO', value: player.birth_date ? format(new Date(player.birth_date), 'dd/MM/yyyy') : player.birth_year },
+                              { label: 'FECHA NACIMIENTO', value: player.birth_date ? (() => { try { const d = new Date(player.birth_date!); return isNaN(d.getTime()) ? player.birth_date : format(d, 'dd/MM/yyyy'); } catch { return player.birth_date; } })() : player.birth_year },
                               { label: 'ALTURA', value: player.approximate_height ? `${player.approximate_height} CM` : '---' },
                               { label: 'PESO', value: player.weight_kg ? `${player.weight_kg} KG` : '---' },
                             ].map((item, i) => (
@@ -594,6 +764,30 @@ export function PlayerDetail({
                               </div>
                             ))}
                          </div>
+                      </div>
+
+                      {/* ESTADO DEL JUGADOR */}
+                      <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 shadow-xl backdrop-blur-sm">
+                        <div className="flex items-center justify-between mb-6">
+                           <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em] italic">Estado Actual</h3>
+                           <Target size={18} className="text-emerald-500/50" />
+                        </div>
+                        <select
+                          value={formData.status || player.status || 'TRACKING'}
+                          onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
+                          className="w-full bg-slate-950 border-2 border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-emerald-500 appearance-none cursor-pointer hover:border-slate-600 transition-all"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2310b981' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e")`,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 0.75rem center',
+                            backgroundSize: '16px 12px',
+                            paddingRight: '2.5rem'
+                          }}
+                        >
+                          {PLAYER_STATUS_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* TRAYECTORIA TABLE (Image 2 style) */}
@@ -653,16 +847,29 @@ export function PlayerDetail({
                          <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-widest italic font-sans">DEMARCACIÓN</h3>
                          <div className="p-2 bg-slate-950 rounded-lg border border-slate-800"><MapPin size={16} className="text-emerald-500" /></div>
                       </div>
-                      <PitchMap position={player.main_position} />
-                      <div className="space-y-4">
-                         <div className="p-5 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner">
-                            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-2 opacity-70">Posición Principal</p>
-                            <p className="text-sm font-black text-white italic tracking-tight">{player.main_position}</p>
+                      <PitchMap position={player.main_position} secondaryPositions={player.secondary_positions} />
+                      <div className="space-y-3">
+                         <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)] shrink-0" />
+                            <div>
+                               <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest opacity-70">Principal</p>
+                               <p className="text-sm font-black text-white italic tracking-tight">{player.main_position}</p>
+                            </div>
                          </div>
-                         <div className="p-5 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner">
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 opacity-70">Posiciones Secundarias</p>
-                            <p className="text-sm font-black text-slate-400 italic tracking-tight">{(player.secondary_positions || []).join(', ') || 'NINGUNA'}</p>
-                         </div>
+                         {(player.secondary_positions || []).filter(Boolean).map((pos, i) => (
+                           <div key={i} className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)] shrink-0" />
+                              <div>
+                                 <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest opacity-70">{i === 0 ? '2ª Posición' : '3ª Posición'}</p>
+                                 <p className="text-sm font-black text-amber-300 italic tracking-tight">{pos}</p>
+                              </div>
+                           </div>
+                         ))}
+                         {(player.secondary_positions || []).filter(Boolean).length === 0 && (
+                           <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner">
+                              <p className="text-xs text-slate-600 italic">Sin posiciones secundarias</p>
+                           </div>
+                         )}
                       </div>
                    </div>
                 </div>
@@ -684,134 +891,207 @@ export function PlayerDetail({
                       </div>
                    </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
-                      {Object.entries(RATING_CATEGORIES).map(([catId, attributes]) => (
-                        <div key={catId} className="space-y-5 bg-slate-950/40 p-6 rounded-[2.5rem] border border-slate-800/50 hover:border-emerald-500/20 transition-all group">
-                           <div className="bg-slate-900/80 py-3 px-2 rounded-2xl border border-slate-800 text-center shadow-lg group-hover:bg-emerald-500/5 transition-colors">
-                              <h4 className="text-[11px] font-black text-white uppercase tracking-[0.3em] italic">{catId}</h4>
+                   {/* ── BLOQUE ESPECÍFICO DE PORTERO ─────────────────── */}
+                   {player.main_position === 'POR' && (
+                     <div className="space-y-4">
+                       <div className="flex items-center gap-3">
+                         <div className="flex items-center gap-2 px-4 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
+                           <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                           <span className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.25em]">Análisis específico de portero</span>
+                         </div>
+                       </div>
+                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                         {Object.entries(GK_RATING_CATEGORIES).map(([catId, cat]) => (
+                           <div key={catId} className="bg-slate-950/60 rounded-3xl border border-slate-800/60 overflow-hidden">
+                             <div className={cn('px-5 py-4 border-b', cat.color.header)}>
+                               <h4 className={cn('text-[11px] font-black uppercase tracking-[0.25em] italic', cat.color.text)}>
+                                 {cat.label}
+                               </h4>
+                             </div>
+                             <div className="p-4 space-y-3">
+                               {cat.attrs.map((attr, i) => {
+                                 const val = Number(formData[attr.field as keyof Player]) || 0;
+                                 return (
+                                   <div key={i} className="space-y-1 group/row">
+                                     <div className="flex items-start justify-between gap-2">
+                                       <div className="relative group/tip flex-1 min-w-0 cursor-help">
+                                         <span className="text-[10px] font-semibold text-slate-400 uppercase leading-tight group-hover/row:text-slate-200 transition-colors" style={{ wordBreak: 'break-word', hyphens: 'auto' }}>
+                                           {attr.label}
+                                         </span>
+                                         <div className="absolute left-0 bottom-full mb-2 w-52 p-3 bg-slate-900 border border-slate-700 rounded-xl text-[9px] text-slate-300 invisible group-hover/tip:visible z-50 shadow-2xl leading-relaxed pointer-events-none">
+                                           <div className={cn('font-black mb-1 uppercase tracking-widest text-[9px]', cat.color.text)}>{attr.label}</div>
+                                           {attr.tooltip}
+                                         </div>
+                                       </div>
+                                       <span className={cn(
+                                         'text-sm font-black shrink-0 w-6 text-right tabular-nums',
+                                         val === 0 ? 'text-slate-700' : val >= 4 ? cat.color.text : val >= 2 ? 'text-slate-300' : 'text-slate-500'
+                                       )}>
+                                         {val === 0 ? '—' : val}
+                                       </span>
+                                     </div>
+                                     <div className="flex gap-0.5">
+                                       {[1,2,3,4,5].map(v => (
+                                         <div key={v} className={cn(
+                                           'flex-1 h-1.5 rounded-full transition-all',
+                                           val >= v ? cat.color.bar : 'bg-slate-800'
+                                         )} />
+                                       ))}
+                                     </div>
+                                   </div>
+                                 );
+                               })}
+                             </div>
                            </div>
-                           <div className="space-y-3">
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                      {Object.entries(RATING_CATEGORIES).map(([catId, attributes]) => {
+                        const catColors: Record<string, { header: string; bar: string; text: string }> = {
+                          fisicas:   { header: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400', bar: 'bg-emerald-500', text: 'text-emerald-400' },
+                          tecnicas:  { header: 'bg-blue-500/10 border-blue-500/20 text-blue-400',         bar: 'bg-blue-500',    text: 'text-blue-400' },
+                          tacticas:  { header: 'bg-violet-500/10 border-violet-500/20 text-violet-400',   bar: 'bg-violet-500',  text: 'text-violet-400' },
+                          cognitivas:{ header: 'bg-amber-500/10 border-amber-500/20 text-amber-400',      bar: 'bg-amber-500',   text: 'text-amber-400' },
+                          especificas:{ header: 'bg-rose-500/10 border-rose-500/20 text-rose-400',        bar: 'bg-rose-500',    text: 'text-rose-400' },
+                        };
+                        const c = catColors[catId] || catColors.fisicas;
+                        return (
+                        <div key={catId} className="bg-slate-950/60 rounded-3xl border border-slate-800/60 overflow-hidden">
+                           <div className={cn("px-5 py-4 border-b", c.header)}>
+                              <h4 className={cn("text-[11px] font-black uppercase tracking-[0.25em] italic", c.text)}>{catId}</h4>
+                           </div>
+                           <div className="p-4 space-y-3">
                               {attributes.map((attr, i) => {
                                 const val = Number(formData[attr.field as keyof Player]) || 0;
                                 return (
-                                  <div key={i} className="flex items-center justify-between gap-3 group/row relative py-0.5">
-                                    <div className="flex items-center gap-1.5 min-w-0 group/tip relative cursor-help">
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase truncate group-hover/row:text-slate-300 transition-colors leading-none tracking-tight border-b border-dotted border-slate-800">
-                                        {attr.label}
-                                      </span>
-                                      <Info size={10} className="text-slate-800 group-hover/row:text-slate-600 transition-colors shrink-0" />
-                                      
-                                      {/* Tooltip Overlay */}
-                                      <div className="absolute left-0 bottom-full mb-2 w-48 p-3 bg-slate-950 border border-slate-800 rounded-xl text-[9px] text-slate-400 invisible group-hover/tip:visible z-50 shadow-2xl leading-relaxed animate-in fade-in slide-in-from-bottom-1">
-                                        <div className="text-slate-200 font-bold mb-1 uppercase tracking-widest text-[8px]">{attr.label}</div>
-                                        {(attr as any).tooltip}
+                                  <div key={i} className="space-y-1 group/row">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="relative group/tip flex-1 min-w-0 cursor-help">
+                                        <span className="text-[10px] font-semibold text-slate-400 uppercase leading-tight group-hover/row:text-slate-200 transition-colors" style={{ wordBreak: 'break-word', hyphens: 'auto' }}>
+                                          {attr.label}
+                                        </span>
+                                        <div className="absolute left-0 bottom-full mb-2 w-52 p-3 bg-slate-900 border border-slate-700 rounded-xl text-[9px] text-slate-300 invisible group-hover/tip:visible z-50 shadow-2xl leading-relaxed pointer-events-none">
+                                          <div className="text-white font-black mb-1 uppercase tracking-widest text-[9px]">{attr.label}</div>
+                                          {(attr as any).tooltip}
+                                        </div>
                                       </div>
+                                      <span className={cn(
+                                        "text-sm font-black shrink-0 w-6 text-right tabular-nums",
+                                        val === 0 ? "text-slate-700" : val >= 4 ? c.text : val >= 2 ? "text-slate-300" : "text-slate-500"
+                                      )}>
+                                        {val === 0 ? '—' : val}
+                                      </span>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                       <div className={cn(
-                                         "w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black transition-all shadow-lg",
-                                         val >= 4.5 ? "bg-emerald-500 text-slate-950 scale-110 rotate-3" :
-                                         val >= 4 ? "bg-emerald-600 text-slate-950" : 
-                                         val >= 3 ? "bg-blue-600 text-slate-950" :
-                                         val >= 2 ? "bg-amber-600 text-slate-950" :
-                                         val >= 0.5 ? "bg-rose-600 text-slate-950" :
-                                         "bg-slate-800 text-slate-500 border border-slate-700/50"
-                                       )}>
-                                         {val || 0}
-                                       </div>
+                                    <div className="flex gap-0.5">
+                                      {[1,2,3,4,5].map(v => (
+                                        <div key={v} className={cn(
+                                          "flex-1 h-1.5 rounded-full transition-all",
+                                          val >= v ? c.bar : "bg-slate-800"
+                                        )} />
+                                      ))}
                                     </div>
                                   </div>
                                 );
                               })}
-                              
-                              {/* Custom Ratings in especificas column */}
+
                               {catId === 'especificas' && (player.custom_ratings || []).map((cr, idx) => (
-                                <div key={`custom-${idx}`} className="flex items-center justify-between gap-3 group/row">
-                                  <span className="text-[10px] font-bold text-amber-500 uppercase truncate group-hover/row:text-amber-300 transition-colors leading-none tracking-tight">{cr.label}</span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                     <div className={cn(
-                                       "w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black transition-all shadow-lg",
-                                       cr.value >= 4.5 ? "bg-amber-500 text-slate-950 scale-110 rotate-3" :
-                                       cr.value >= 4 ? "bg-amber-600 text-slate-950" : 
-                                       cr.value >= 3 ? "bg-amber-700 text-slate-950" :
-                                       cr.value >= 0.5 ? "bg-amber-800 text-slate-950" :
-                                       "bg-slate-800 text-slate-500 border border-slate-700/50"
-                                     )}>
-                                       {cr.value || 0}
-                                     </div>
+                                <div key={`custom-${idx}`} className="space-y-1 group/row">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-[10px] font-semibold text-amber-400 uppercase leading-tight flex-1">{cr.label}</span>
+                                    <span className="text-sm font-black shrink-0 w-6 text-right text-amber-400 tabular-nums">
+                                      {cr.value === 0 ? '—' : cr.value}
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-0.5">
+                                    {[1,2,3,4,5].map(v => (
+                                      <div key={v} className={cn("flex-1 h-1.5 rounded-full transition-all", cr.value >= v ? "bg-amber-500" : "bg-slate-800")} />
+                                    ))}
                                   </div>
                                 </div>
                               ))}
                            </div>
                         </div>
-                      ))}
+                        );
+                      })}
                    </div>
 
-                   {/* Graficas Comparativas */}
-                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center pt-16 border-t border-slate-800/50">
-                      <div className="h-[400px] w-full flex flex-col items-center justify-center bg-slate-950/40 rounded-[3rem] border border-slate-800/50 p-8 shadow-inner relative overflow-hidden group">
-                        <div className="absolute top-8 left-8">
-                           <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic mb-1">Radar de Atributos</p>
-                           <h4 className="text-xl font-black text-white italic tracking-tighter">PERFIL DINÁMICO</h4>
-                        </div>
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                           <RadarChart cx="50%" cy="50%" outerRadius="80%" data={
-                              Object.entries(RATING_CATEGORIES).map(([catId, attrs]) => ({
-                                name: catId.toUpperCase(),
-                                value: attrs.reduce((acc, a) => acc + (Number(formData[a.field as keyof Player]) || 0), 0) / attrs.length
-                              }))
-                           }>
-                             <PolarGrid stroke="#1e293b" />
-                             <PolarAngleAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 'black' }} />
-                             <Radar
-                               name="Jugador"
-                               dataKey="value"
-                               stroke="#10b981"
-                               fill="#10b981"
-                               fillOpacity={0.3}
-                               strokeWidth={3}
-                               animationDuration={1500}
-                             />
-                           </RadarChart>
-                        </ResponsiveContainer>
-                      </div>
-
-                      <div className="h-[400px] w-full bg-slate-950/40 rounded-[3rem] border border-slate-800/50 p-10 shadow-inner flex flex-col justify-center group">
-                        <div className="mb-8">
-                           <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest italic mb-1">Distribución por Áreas</p>
-                           <h4 className="text-xl font-black text-white italic tracking-tighter uppercase">Potencial Sectorial</h4>
-                        </div>
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                           <BarChart layout="vertical" data={
-                              Object.entries(RATING_CATEGORIES).map(([catId, attrs]) => ({
-                                name: catId.toUpperCase(),
-                                value: attrs.reduce((acc, a) => acc + (Number(formData[a.field as keyof Player]) || 0), 0) / attrs.length
-                              }))
-                           } margin={{ left: 60, right: 20 }}>
-                             <XAxis type="number" domain={[0, 5]} hide />
-                             <YAxis 
-                               dataKey="name" 
-                               type="category" 
-                               axisLine={false} 
-                               tickLine={false} 
-                               tick={{ fill: '#64748b', fontSize: 11, fontWeight: 'black' }}
-                             />
-                             <Tooltip 
-                                cursor={{ fill: 'rgba(255,255,255,0.03)', radius: 10 }}
-                                contentStyle={{ backgroundColor: '#020617', border: '1px solid #1e293b', borderRadius: '16px', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
-                             />
-                             <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={28}>
-                               {Object.entries(RATING_CATEGORIES).map((_, i) => (
-                                 <Cell key={`cell-${i}`} fill={['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][i % 5]} />
+                   {/* ── Radares FBref por área ─────────────────────── */}
+                   <div className="pt-16 border-t border-slate-800/50 space-y-6">
+                     <div>
+                       <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic">Radar de Atributos</p>
+                       <h4 className="text-xl font-black text-white italic tracking-tighter uppercase">Perfil por Áreas</h4>
+                     </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                       {(['fisicas','tecnicas','tacticas','cognitivas'] as const).map(catId => {
+                         const areaMap = {
+                           fisicas:    { label:'FÍSICAS',    color:'#10b981', fill:'rgba(16,185,129,0.28)'  },
+                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', fill:'rgba(96,165,250,0.28)'  },
+                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', fill:'rgba(167,139,250,0.28)' },
+                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', fill:'rgba(251,191,36,0.25)'  },
+                         } as const;
+                         const area = areaMap[catId];
+                         const attrs = RATING_CATEGORIES[catId];
+                         const W=460, H=500, cx=W/2, cy=H/2+10, R=140, RINGS=5;
+                         const n=attrs.length, step=(2*Math.PI)/n, start=-Math.PI/2;
+                         const pt=(a:number,r:number)=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
+                         const vals=attrs.map(a=>{
+                           const raw=Number(formData[a.field as keyof Player])||0;
+                           return {label:a.label,norm:raw/5,pct:Math.round((raw/5)*100)};
+                         });
+                         const polygon=vals.map((d,i)=>{
+                           const a=start+i*step;
+                           return `${cx+d.norm*R*Math.cos(a)},${cy+d.norm*R*Math.sin(a)}`;
+                         }).join(' ');
+                         const anchor=(a:number)=>Math.cos(a)>0.25?'start':Math.cos(a)<-0.25?'end':'middle';
+                         const labelRot=(a:number)=>{
+                           let d=(a*180/Math.PI)+90;
+                           while(d>180)d-=360; while(d<-180)d+=360;
+                           if(d>90)d-=180; if(d<-90)d+=180; return d;
+                         };
+                         return (
+                           <div key={catId} className="rounded-2xl overflow-hidden border border-slate-800/30 shadow-2xl" style={{background:'#0d1117'}}>
+                             <div className="text-center pt-5 pb-0 px-4">
+                               <p className="text-[9px] font-black uppercase tracking-[0.3em] italic mb-0.5" style={{color:area.color}}>Radar de Atributos</p>
+                               <h5 className="text-lg font-black text-white uppercase italic tracking-tighter leading-none">{area.label}</h5>
+                             </div>
+                             <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
+                               {Array.from({length:RINGS}).map((_,ri)=>(
+                                 <circle key={ri} cx={cx} cy={cy} r={R*((RINGS-ri)/RINGS)} fill={ri%2===0?'#111827':'#0d1117'} />
                                ))}
-                             </Bar>
-                           </BarChart>
-                        </ResponsiveContainer>
-                        <div className="mt-6 flex justify-end">
-                           <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.3em]">Scout Analysis Data Engine</span>
-                        </div>
-                      </div>
+                               <circle cx={cx} cy={cy} r={R} fill="none" stroke="#1f2937" strokeWidth={1}/>
+                               {Array.from({length:RINGS-1}).map((_,ri)=>(
+                                 <circle key={ri} cx={cx} cy={cy} r={R*((ri+1)/RINGS)} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
+                               ))}
+                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#374151" strokeWidth={1}/>;}) }
+                               <polygon points={polygon} fill={area.fill} stroke={area.color} strokeWidth={2.5} strokeLinejoin="round"/>
+                               {vals.map((d,i)=>{
+                                 const a=start+i*step,bp=pt(a,R+17),lp=pt(a,R+44),rot=labelRot(a),anch=anchor(a),ws=d.label.split(' ');
+                                 return(
+                                   <g key={i}>
+                                     <rect x={bp.x-14} y={bp.y-11} width={28} height={22} rx={4} fill="#1e3a5f"/>
+                                     <text x={bp.x} y={bp.y+5} textAnchor="middle" fill="white" fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">{d.pct}</text>
+                                     {ws.length===1?(
+                                       <text x={lp.x} y={lp.y} textAnchor={anch} dominantBaseline="middle" fill="#cbd5e1" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif" transform={`rotate(${rot},${lp.x},${lp.y})`}>{d.label}</text>
+                                     ):(
+                                       <text x={lp.x} y={lp.y} textAnchor={anch} fill="#cbd5e1" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif" transform={`rotate(${rot},${lp.x},${lp.y})`}>
+                                         <tspan x={lp.x} dy="-0.55em">{ws[0]}</tspan>
+                                         <tspan x={lp.x} dy="1.2em">{ws.slice(1).join(' ')}</tspan>
+                                       </text>
+                                     )}
+                                   </g>
+                                 );
+                               })}
+                             </svg>
+                             <p className="text-center text-[8px] font-black text-slate-700 uppercase tracking-[0.2em] pb-4">Scouting Club · Escala 1-5</p>
+                           </div>
+                         );
+                       })}
+                     </div>
                    </div>
+
                 </div>
               </div>
             )}
@@ -867,12 +1147,17 @@ export function PlayerDetail({
                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {renderDataField('Fecha Nacimiento', 'birth_date', 'date')}
                       {renderDataField('Año Nacimiento', 'birth_year', 'number')}
-                      {renderDataField('Edad Calculada', 'calculated_age', 'number')}
+                      <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3 relative group">
+                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Edad Calculada</label>
+                        <p className="text-sm font-black text-emerald-400">
+                          {formData.calculated_age != null ? `${formData.calculated_age} años` : '—'}
+                        </p>
+                      </div>
                       {renderDataField('Ciudad / Zona', 'area')}
                    </div>
 
                    {/* Bloque Club/Competición */}
-                   <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                   <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {renderDataField('Equipo Actual', 'club_name')}
                       <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3 relative group">
                         <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Cat. Federativa (Auto)</label>
@@ -880,28 +1165,33 @@ export function PlayerDetail({
                           {calculateCategory(formData.birth_year || 0)}
                         </p>
                       </div>
-                      {renderDataField('División / Nivel', 'category_id')}
                       {renderDataField('Liga / Competición', 'league')}
                    </div>
 
                    {/* Bloque Futbolístico */}
                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {renderDataField('Dorsal Habitual', 'usual_number')}
-                      {renderDataField('Posición Ppal.', 'main_position')}
-                      {renderDataField('Posiciones Sec.', 'secondary_positions', 'text', [], true)}
-                      {renderDataField('Pierna Dominante', 'dominant_foot', 'select', [
-                        {value: 'RIGHT', label: 'Diestro'},
-                        {value: 'LEFT', label: 'Zurdo'},
-                        {value: 'BOTH', label: 'Ambidiestro'},
-                        {value: 'UNKNOWN', label: 'Desconocido'}
-                      ])}
+                      {renderDataField('Posición Ppal.', 'main_position', 'select', POSITION_OPTIONS)}
+                      {renderPositionSelectField('2ª Posición', 0)}
+                      {renderPositionSelectField('3ª Posición', 1)}
                    </div>
 
                    {/* Bloque Físico */}
                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {renderDataField('Altura aprox (cm)', 'approximate_height', 'number')}
                       {renderDataField('Peso aprox (kg)', 'weight_kg', 'number')}
-                      {renderDataField('Fuente Info', 'info_source')}
+                      {renderDataField('Pierna Dominante', 'dominant_foot', 'select', [
+                        {value: 'RIGHT', label: 'Diestro'},
+                        {value: 'LEFT', label: 'Zurdo'},
+                        {value: 'BOTH', label: 'Ambidiestro'},
+                      ])}
+                      {renderDataField('Fuente Info', 'info_source', 'select', [
+                        {value: 'WEB', label: 'Web'},
+                        {value: 'PADRES', label: 'Padres'},
+                        {value: 'CLUB', label: 'Club'},
+                        {value: 'ENTRENADORES', label: 'Entrenadores'},
+                        {value: 'OTROS', label: 'Otros'},
+                      ])}
                    </div>
 
                    {/* Observaciones */}
@@ -1098,12 +1388,26 @@ export function PlayerDetail({
             {activeTab === 'historial' && (
               <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-8">
                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2"><History size={16}/> Historial de Cambios</h3>
-                 <div className="grid grid-cols-1 gap-4 opacity-50">
+                 {history.length > 0 && (
+                   <div className="grid grid-cols-1 gap-4 mb-4">
+                      {history.map((entry) => (
+                        <div key={entry.id} className="flex items-start gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                           <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center shrink-0"><MousePointer2 size={16}/></div>
+                           <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-200 break-words">Se actualizÃ³ <span className="text-emerald-400">{entry.field}</span></p>
+                              <p className="text-[11px] text-slate-400 mt-1 break-words">{entry.old_value || 'vacÃ­o'} {' -> '} {entry.new_value || 'vacÃ­o'}</p>
+                              <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest">{format(new Date(entry.created_at), "dd MMMM yyyy - HH:mm", { locale: es })}</p>
+                           </div>
+                        </div>
+                      ))}
+                   </div>
+                 )}
+                 <div className={cn("grid grid-cols-1 gap-4 opacity-50", history.length > 0 && "hidden")}>
                     <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
                        <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center"><MousePointer2 size={16}/></div>
                        <div>
-                          <p className="text-xs font-bold text-slate-200">Jugador actualizado por Scout Principal</p>
-                          <p className="text-[10px] text-slate-500">22 JUNIO 2024 - 14:32</p>
+                          <p className="text-xs font-bold text-slate-200">TodavÃ­a no hay cambios registrados para este jugador</p>
+                          <p className="text-[10px] text-slate-500">El historial aparecerÃ¡ aquÃ­ cuando guardes cambios del perfil</p>
                        </div>
                     </div>
                     <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">

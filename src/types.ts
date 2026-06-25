@@ -20,9 +20,12 @@ export interface Profile {
 
 export interface Club {
   id: string;
+  ref_code?: string;
+  ref_seq?: number;
   name: string;
   current_season: string;
   logo_url?: string;
+  location?: string;
   created_at: string;
   updated_at: string;
 }
@@ -84,6 +87,8 @@ export interface TrajectoryEntry {
 
 export interface Player {
   id: string;
+  ref_code?: string;
+  ref_seq?: number;
   club_id: string;
   first_name: string;
   last_name?: string;
@@ -286,10 +291,10 @@ export interface Video {
 export interface HistoryLog {
   id: string;
   player_id: string;
-  user_id: string;
+  user_id?: string | null;
   field: string;
-  old_value: string;
-  new_value: string;
+  old_value?: string | null;
+  new_value?: string | null;
   created_at: string;
 }
 

@@ -375,10 +375,18 @@ export function ReportForm({
                 value={formData.recommendation}
                 onChange={(e) => setFormData({...formData, recommendation: e.target.value as any})}
               >
-                <option value="TRACKING">Seguimiento</option>
-                <option value="INTERESTING">Interesante</option>
-                <option value="PRIORITY">PRIORITARIO</option>
-                <option value="DISCARDED">Descartar</option>
+                <option value="">Seleccionar estado...</option>
+                <option value="NUEVO">Nuevo</option>
+                <option value="PRIORIDAD">Prioridad</option>
+                <option value="EN_SEGUIMIENTO">En Seguimiento</option>
+                <option value="DESCARTADO">Descartado</option>
+                <option value="OBSERVADO">Observado</option>
+                <option value="INTERESANTE">Interesante</option>
+                <option value="MUY_INTERESANTE">Muy Interesante</option>
+                <option value="CONTACTADO">Contactado</option>
+                <option value="EN_PRUEBA">En Prueba</option>
+                <option value="FICHADO">Fichado</option>
+                <option value="NO_DISPONIBLE">No Disponible</option>
               </select>
             </div>
           </div>
@@ -401,7 +409,7 @@ export function ReportForm({
                 <div className="grid grid-cols-1 gap-6">
                    <div className="space-y-3">
                       <div className="flex items-center justify-between px-1">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Anotaciones Generales / Key Actions</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Anotaciones Generales / Acciones Clave</label>
                         <SpeechToTextButton 
                           onTranscript={(t) => setFormData(prev => ({ ...prev, technical_comment: prev.technical_comment ? prev.technical_comment + ' ' + t : t }))} 
                         />

@@ -340,6 +340,7 @@ export const PlayerList = memo(function PlayerList({
                        </div>
                        <div>
                          <p className="font-black text-slate-100 group-hover:text-emerald-400 transition-colors tracking-tight">{player.full_name}</p>
+                         {player.ref_code && <span className="ref-chip mt-1">{player.ref_code}</span>}
                        </div>
                     </div>
                   </td>
@@ -427,6 +428,7 @@ export const PlayerList = memo(function PlayerList({
                       <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">
                         {player.main_position} • {calculateCategory(player.birth_year)} • {player.birth_year || 'N/R'} ({player.calculated_age}A)
                       </p>
+                      {player.ref_code && <span className="ref-chip mt-1.5">{player.ref_code}</span>}
                     </div>
                   </div>
                   <div className="text-right">

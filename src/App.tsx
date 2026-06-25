@@ -2,24 +2,73 @@ import { useState, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { PlayerList } from './components/PlayerList';
-import { TeamList } from './components/TeamList';
+import { ClubList } from './components/ClubList';
+import { ClubDetail } from './components/ClubDetail';
 import { PlayerDetail } from './components/PlayerDetail';
 import { QuickAddModal } from './components/QuickAddModal';
 import { MatchList } from './components/MatchList';
 import { MatchDetail } from './components/MatchDetail';
+import { NewMatchModal } from './components/NewMatchModal';
+import { LinkPlayerModal } from './components/LinkPlayerModal';
 import { ReportList } from './components/ReportList';
 import { ReportForm } from './components/ReportForm';
 import { SettingsPanel } from './components/SettingsPanel';
+import { Comparativas } from './components/Comparativas';
 import { Plus } from 'lucide-react';
 import { MOCK_PLAYERS, MOCK_REPORTS, MOCK_MATCHES, MOCK_VIDEOS } from './mockData';
 import { Player, Match, Report, Video, HistoryLog } from './types';
 import { supabase } from './lib/supabase';
+import { computeAge } from './lib/utils';
 import { useEffect } from 'react';
 
 const isValidUUID = (str: string) => {
   if (!str) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 };
+
+const serializeHistoryValue = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const areValuesEqual = (left: unknown, right: unknown) =>
+  serializeHistoryValue(left) === serializeHistoryValue(right);
+
+const TRACKED_PLAYER_FIELDS: Array<keyof Player> = [
+  'global_rating',
+  'potential_rating',
+  'rating_technical',
+  'rating_tactical',
+  'rating_physical',
+  'rating_mental',
+  'rating_competitive',
+  'rating_decision_making',
+  'rating_pace',
+  'rating_intelligence',
+  'rating_personality',
+  'rating_potential',
+  'rating_club_fit',
+  'technical_profile',
+  'tactical_profile',
+  'physical_profile',
+  'mental_profile',
+  'differential_talent',
+  'risks_analysis',
+  'improvement_margin',
+  'player_type',
+  'ideal_role',
+  'current_level_club',
+  'future_level_estimated',
+  'comparison_players',
+  'general_observations',
+  'verification_status',
+  'avatar_url',
+];
 
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -33,8 +82,11 @@ export default function App() {
   const [selectedPlayerTab, setSelectedPlayerTab] = useState('resumen');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [selectedClub, setSelectedClub] = useState<string | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
+  const [isNewMatchOpen, setIsNewMatchOpen] = useState(false);
+  const [isLinkPlayerOpen, setIsLinkPlayerOpen] = useState(false);
   const [reportToCreate, setReportToCreate] = useState<{playerId?: string, matchId?: string, mode?: 'RAPID' | 'COMPLETE'} | null>(null);
   
   const [userRole] = useState('SUPERADMIN');
@@ -64,17 +116,13 @@ export default function App() {
         alert('ADVERTENCIA: No se puede acceder a la tabla "players" en Supabase. Asegúrate de haber ejecutado el script SQL en el editor de Supabase.');
       }
 
-      // 1. Ensure a club exists
+      // 1. Ensure a club exists (upsert prevents duplicates even with StrictMode double-invoke)
       let clubId = null;
-      const { data: clubs } = await supabase.from('clubs').select('id').limit(1);
-      if (clubs && clubs.length > 0) {
-        clubId = clubs[0].id;
-      } else {
-        const { data: newClub } = await supabase.from('clubs').insert([
-          { name: 'U.D. SANTA MARIÑA', current_season: '2026/2027' }
-        ]).select().single();
-        if (newClub) clubId = newClub.id;
-      }
+      const { data: newClub } = await supabase.from('clubs')
+        .upsert([{ name: 'U.D. SANTA MARIÑA', current_season: '2026/2027' }], { onConflict: 'name' })
+        .select('id')
+        .single();
+      if (newClub) clubId = newClub.id;
 
       // 2. Ensure a team exists
       let teamId = null;
@@ -111,6 +159,16 @@ export default function App() {
 
       const { data: reportsData } = await supabase.from('reports').select('*');
       if (reportsData && reportsData.length > 0) setReports(reportsData as Report[]);
+
+      const { data: historyData, error: historyError } = await supabase
+        .from('history_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (historyError) {
+        console.warn('History logs fetch warning:', historyError);
+      } else if (historyData && historyData.length > 0) {
+        setHistory(historyData as HistoryLog[]);
+      }
 
     } catch (err) {
       console.error('Bootstrap error:', err);
@@ -153,11 +211,13 @@ export default function App() {
       'rating_liderazgo', 'rating_caracter', 'rating_competitiv', 'rating_companerismo',
       'rating_mentalidad', 'rating_agresividad', 'rating_polivalencia', 'rating_inteligencia',
       'rating_comunicacion', 'rating_personalidad', 'rating_juego_aereo', 'custom_ratings',
-      'rating_club_fit', 'risks_analysis', 'improvement_margin', 'player_type', 'ideal_role',
+      'rating_competitive', 'rating_decision_making', 'rating_pace', 'rating_intelligence',
+      'rating_personality', 'rating_potential', 'rating_club_fit', 'risks_analysis',
+      'improvement_margin', 'player_type', 'ideal_role',
       'current_level_club', 'future_level_estimated', 'comparison_players', 'technical_profile',
       'tactical_profile', 'physical_profile', 'mental_profile', 'birth_place', 'passport',
       'agent_name', 'weight_kg', 'info_source', 'general_observations', 'verification_status',
-      'created_by', 'decision_final', 'decision_date'
+      'created_by', 'decision_final', 'decision_date', 'possible_duplicate'
     ];
 
     const cleaned: any = {};
@@ -185,6 +245,44 @@ export default function App() {
     return cleaned;
   };
 
+  const buildPlayerHistoryEntries = (previousPlayer: Player, nextPlayer: Player): Omit<HistoryLog, 'id' | 'created_at'>[] =>
+    TRACKED_PLAYER_FIELDS
+      .filter((field) => !areValuesEqual(previousPlayer[field], nextPlayer[field]))
+      .map((field) => ({
+        player_id: nextPlayer.id,
+        user_id: isValidUUID(nextPlayer.created_by || '') ? nextPlayer.created_by : isValidUUID(previousPlayer.created_by || '') ? previousPlayer.created_by : null,
+        field: String(field),
+        old_value: serializeHistoryValue(previousPlayer[field]),
+        new_value: serializeHistoryValue(nextPlayer[field]),
+      }));
+
+  const persistHistoryEntries = async (entries: Omit<HistoryLog, 'id' | 'created_at'>[]) => {
+    if (!entries.length) return;
+
+    const optimisticEntries: HistoryLog[] = entries.map((entry, index) => ({
+      id: `history-${Date.now()}-${index}`,
+      created_at: new Date().toISOString(),
+      ...entry,
+    }));
+    setHistory((prev) => [...optimisticEntries, ...prev]);
+
+    try {
+      const { data, error } = await supabase.from('history_logs').insert(entries).select('*');
+      if (error) {
+        console.error('Error saving history logs:', error);
+        return;
+      }
+      if (data) {
+        setHistory((prev) => [
+          ...(data as HistoryLog[]),
+          ...prev.filter((item) => !optimisticEntries.some((optimistic) => optimistic.id === item.id)),
+        ]);
+      }
+    } catch (error) {
+      console.error('History persistence exception:', error);
+    }
+  };
+
   // Helper to clean report data for Supabase
   const prepareReportForDB = async (report: Report) => {
     const allowedFields = [
@@ -204,25 +302,33 @@ export default function App() {
     });
 
     if (!isValidUUID(cleaned.id)) delete cleaned.id;
-    
+
+    // Convertir cadenas vacías en campos UUID a null
+    const uuidFields = ['player_id', 'match_id', 'observer_id'];
+    uuidFields.forEach(field => {
+      if (cleaned[field] === '' || cleaned[field] === null) {
+        cleaned[field] = null;
+      }
+    });
+
     // player_id MUST be a valid UUID
-    if (!cleaned.player_id || !isValidUUID(cleaned.player_id)) {
-      if (cleaned.player_id && !isValidUUID(cleaned.player_id)) {
-        const realPlayer = players.find(p => p.id === cleaned.player_id);
-        if (realPlayer && isValidUUID(realPlayer.id)) {
-          cleaned.player_id = realPlayer.id;
-        }
+    if (cleaned.player_id && !isValidUUID(cleaned.player_id)) {
+      const realPlayer = players.find(p => p.id === cleaned.player_id);
+      if (realPlayer && isValidUUID(realPlayer.id)) {
+        cleaned.player_id = realPlayer.id;
+      } else {
+        delete cleaned.player_id;
       }
     }
 
-    if (cleaned.match_id && !isValidUUID(cleaned.match_id)) {
-      const { data: matchesData } = await supabase.from('matches').select('id').limit(1);
-      if (matchesData && matchesData[0]) cleaned.match_id = matchesData[0].id;
-      else delete cleaned.match_id;
+    // match_id: si no es UUID válido, poner null
+    if (cleaned.match_id !== null && cleaned.match_id !== undefined && !isValidUUID(cleaned.match_id)) {
+      cleaned.match_id = null;
     }
 
-    if (cleaned.observer_id && !isValidUUID(cleaned.observer_id)) {
-      delete cleaned.observer_id;
+    // observer_id: si no es UUID válido, poner null
+    if (cleaned.observer_id !== null && cleaned.observer_id !== undefined && !isValidUUID(cleaned.observer_id)) {
+      cleaned.observer_id = null;
     }
 
     return cleaned;
@@ -237,7 +343,7 @@ export default function App() {
         last_name: newPlayerData.name?.split(' ').slice(1).join(' ') || '',
         main_position: newPlayerData.position,
         birth_year: Number(newPlayerData.birth_year),
-        calculated_age: new Date().getFullYear() - Number(newPlayerData.birth_year),
+        calculated_age: computeAge(newPlayerData.birth_date, Number(newPlayerData.birth_year)),
         dominant_foot: newPlayerData.dominant_foot,
         status: newPlayerData.status,
         interest_level: Number(newPlayerData.rating),
@@ -286,7 +392,7 @@ export default function App() {
         last_name: newPlayerData.name?.split(' ').slice(1).join(' ') || '',
         full_name: newPlayerData.name || 'Sin Nombre',
         birth_year: birthYear,
-        calculated_age: new Date().getFullYear() - birthYear,
+        calculated_age: computeAge(newPlayerData.birth_date, birthYear),
         category_id: undefined,
         current_team_id: undefined,
         club_name: newPlayerData.team || 'Equipo Demo',
@@ -388,6 +494,8 @@ export default function App() {
   };
 
   const handleUpdatePlayer = async (updatedPlayer: Player) => {
+    const previousPlayer = players.find(p => p.id === updatedPlayer.id);
+
     // Local update for immediate feedback
     setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
     if (selectedPlayer?.id === updatedPlayer.id) {
@@ -409,6 +517,9 @@ export default function App() {
           console.error('Error updating player in Supabase:', error);
           alert('Error al actualizar en la base de datos: ' + error.message);
         } else {
+          if (previousPlayer) {
+            await persistHistoryEntries(buildPlayerHistoryEntries(previousPlayer, updatedPlayer));
+          }
            console.log('Player updated successfully in Supabase');
         }
       } else {
@@ -440,6 +551,27 @@ export default function App() {
     setReports(prev => prev.filter(r => r.id !== reportId));
     // Supabase
     await supabase.from('reports').delete().eq('id', reportId);
+  };
+
+  const handleLinkPlayerToMatch = async (playerId: string) => {
+    if (!selectedMatch) return;
+    const updatedIds = [...(selectedMatch.observed_players_ids || []), playerId];
+    setMatches(prev => prev.map(m =>
+      m.id === selectedMatch.id ? { ...m, observed_players_ids: updatedIds } : m
+    ));
+    setSelectedMatch(prev => prev ? { ...prev, observed_players_ids: updatedIds } : prev);
+    setIsLinkPlayerOpen(false);
+    await supabase.from('matches').update({ observed_players_ids: updatedIds }).eq('id', selectedMatch.id);
+  };
+
+  const handleUnlinkPlayerFromMatch = async (playerId: string) => {
+    if (!selectedMatch) return;
+    const updatedIds = (selectedMatch.observed_players_ids || []).filter(id => id !== playerId);
+    setMatches(prev => prev.map(m =>
+      m.id === selectedMatch.id ? { ...m, observed_players_ids: updatedIds } : m
+    ));
+    setSelectedMatch(prev => prev ? { ...prev, observed_players_ids: updatedIds } : prev);
+    await supabase.from('matches').update({ observed_players_ids: updatedIds }).eq('id', selectedMatch.id);
   };
 
   const handleSaveMatch = async (matchData: any) => {
@@ -494,13 +626,33 @@ export default function App() {
   };
 
   const handleSaveReport = async (data: any) => {
+    // Auto-detect existing report for same player+match to prevent duplicates.
+    // This covers the workflow: quick field report → complete at home → add data later
+    // all on the same player+match = one single report (always UPDATE after first save).
+    let effectiveEditingReport = editingReport;
+    if (!effectiveEditingReport && data.player_id) {
+      if (data.match_id) {
+        // Same player + same match → always one report
+        effectiveEditingReport = reports.find(r =>
+          r.player_id === data.player_id && r.match_id === data.match_id
+        ) || null;
+      } else {
+        // No match linked → same player + same date → one report per day
+        const day = (data.report_date || '').split('T')[0];
+        effectiveEditingReport = reports.find(r => {
+          const rDay = (r.report_date || r.created_at || '').split('T')[0];
+          return r.player_id === data.player_id && !r.match_id && rDay === day;
+        }) || null;
+      }
+    }
+
     // 1. Create or Update Report object
     const reportData: Report = {
-      ...(editingReport || {}),
-      id: editingReport?.id || (window.crypto.randomUUID ? window.crypto.randomUUID() : `r-${Date.now()}`),
+      ...(effectiveEditingReport || {}),
+      id: effectiveEditingReport?.id || (window.crypto.randomUUID ? window.crypto.randomUUID() : `r-${Date.now()}`),
       player_id: data.player_id!,
       match_id: data.match_id,
-      observer_id: editingReport?.observer_id, // Leave null for now if not UUID
+      observer_id: effectiveEditingReport?.observer_id, // Leave null for now if not UUID
       report_date: data.report_date || new Date().toISOString(),
       recommendation: data.recommendation || 'TRACKING',
       match_rating: Number(data.match_rating) || 3,
@@ -518,7 +670,7 @@ export default function App() {
       rating_tactical: Number(data.rating_tactical) || 0,
       rating_mental: Number(data.rating_mental) || 0,
       custom_ratings: data.custom_ratings || [],
-      created_at: editingReport?.created_at || new Date().toISOString(),
+      created_at: effectiveEditingReport?.created_at || new Date().toISOString(),
     };
 
     // Prepare report for DB
@@ -527,10 +679,10 @@ export default function App() {
       
       let finalReportId = reportData.id;
 
-      if (editingReport && isValidUUID(editingReport.id)) {
-        const { error } = await supabase.from('reports').update(cleanedReport).eq('id', editingReport.id);
+      if (effectiveEditingReport && isValidUUID(effectiveEditingReport.id)) {
+        const { error } = await supabase.from('reports').update(cleanedReport).eq('id', effectiveEditingReport.id);
         if (error) throw error;
-        setReports(prev => prev.map(r => r.id === editingReport.id ? reportData : r));
+        setReports(prev => prev.map(r => r.id === effectiveEditingReport!.id ? reportData : r));
       } else {
         const { data: inserted, error } = await supabase.from('reports').insert([cleanedReport]).select();
         if (error) throw error;
@@ -547,9 +699,25 @@ export default function App() {
       // We don't return here so we still try to update local state if possible, or at least player data
     }
 
-    // 2. Update Player Profile with new ratings and data
+    // 2. Update Player Profile - non-rating fields from latest report,
+    //    RATING fields = average of ALL reports for this player (multi-scout fairness)
     const playerToUpdate = players.find(p => p.id === data.player_id);
     if (playerToUpdate) {
+      // Pool: current report + all previous reports for this player
+      const allPlayerReports = [
+        reportData,
+        ...reports.filter(r => r.player_id === data.player_id && r.id !== reportData.id),
+      ];
+
+      // Average only reports that have a non-zero value for the field
+      const avgRating = (field: string): number => {
+        const vals = allPlayerReports
+          .map(r => Number((r as any)[field]) || 0)
+          .filter(v => v > 0);
+        if (vals.length === 0) return 0;
+        return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
+      };
+
       const updatedPlayer: Player = {
         ...playerToUpdate,
         short_name: data.short_name || playerToUpdate.short_name,
@@ -559,59 +727,65 @@ export default function App() {
         weight_kg: data.weight_kg ? Number(data.weight_kg) : playerToUpdate.weight_kg,
         status: data.recommendation || playerToUpdate.status,
         next_step: data.next_step || playerToUpdate.next_step,
-        
-        rating_physical: Number(data.rating_physical) || playerToUpdate.rating_physical,
-        rating_technical: Number(data.rating_technical) || playerToUpdate.rating_technical,
-        rating_tactical: Number(data.rating_tactical) || playerToUpdate.rating_tactical,
-        rating_mental: Number(data.rating_mental) || playerToUpdate.rating_mental,
+
+        // Global ratings — media de todos los informes
+        rating_physical:  avgRating('rating_physical')  || playerToUpdate.rating_physical,
+        rating_technical: avgRating('rating_technical') || playerToUpdate.rating_technical,
+        rating_tactical:  avgRating('rating_tactical')  || playerToUpdate.rating_tactical,
+        rating_mental:    avgRating('rating_mental')    || playerToUpdate.rating_mental,
         custom_ratings: data.custom_ratings || playerToUpdate.custom_ratings,
-        
-        rating_velo_despl: Number(data.rating_velo_despl) || playerToUpdate.rating_velo_despl,
-        rating_acel: Number(data.rating_acel) || playerToUpdate.rating_acel,
-        rating_fuerza: Number(data.rating_fuerza) || playerToUpdate.rating_fuerza,
-        rating_resis: Number(data.rating_resis) || playerToUpdate.rating_resis,
-        rating_agil: Number(data.rating_agil) || playerToUpdate.rating_agil,
-        rating_coord: Number(data.rating_coord) || playerToUpdate.rating_coord,
-        rating_velo_reac: Number(data.rating_velo_reac) || playerToUpdate.rating_velo_reac,
-        rating_poten: Number(data.rating_poten) || playerToUpdate.rating_poten,
-        rating_recup_fatiga: Number(data.rating_recup_fatiga) || playerToUpdate.rating_recup_fatiga,
-        rating_tenden_lesion: Number(data.rating_tenden_lesion) || playerToUpdate.rating_tenden_lesion,
 
-        rating_pase_corto: Number(data.rating_pase_corto) || playerToUpdate.rating_pase_corto,
-        rating_pase_largo: Number(data.rating_pase_largo) || playerToUpdate.rating_pase_largo,
-        rating_ctrl_balon: Number(data.rating_ctrl_balon) || playerToUpdate.rating_ctrl_balon,
-        rating_tiro: Number(data.rating_tiro) || playerToUpdate.rating_tiro,
-        rating_regate: Number(data.rating_regate) || playerToUpdate.rating_regate,
-        rating_conduc: Number(data.rating_conduc) || playerToUpdate.rating_conduc,
-        rating_superf_cont: Number(data.rating_superf_cont) || playerToUpdate.rating_superf_cont,
-        rating_despeje: Number(data.rating_despeje) || playerToUpdate.rating_despeje,
-        rating_entrada: Number(data.rating_entrada) || playerToUpdate.rating_entrada,
-        rating_pierna_menos: Number(data.rating_pierna_menos) || playerToUpdate.rating_pierna_menos,
+        // Físicas
+        rating_velo_despl:    avgRating('rating_velo_despl')    || playerToUpdate.rating_velo_despl,
+        rating_acel:          avgRating('rating_acel')          || playerToUpdate.rating_acel,
+        rating_fuerza:        avgRating('rating_fuerza')        || playerToUpdate.rating_fuerza,
+        rating_resis:         avgRating('rating_resis')         || playerToUpdate.rating_resis,
+        rating_agil:          avgRating('rating_agil')          || playerToUpdate.rating_agil,
+        rating_coord:         avgRating('rating_coord')         || playerToUpdate.rating_coord,
+        rating_velo_reac:     avgRating('rating_velo_reac')     || playerToUpdate.rating_velo_reac,
+        rating_poten:         avgRating('rating_poten')         || playerToUpdate.rating_poten,
+        rating_recup_fatiga:  avgRating('rating_recup_fatiga')  || playerToUpdate.rating_recup_fatiga,
+        rating_tenden_lesion: avgRating('rating_tenden_lesion') || playerToUpdate.rating_tenden_lesion,
 
-        rating_posic: Number(data.rating_posic) || playerToUpdate.rating_posic,
-        rating_cobertura: Number(data.rating_cobertura) || playerToUpdate.rating_cobertura,
-        rating_repliegue: Number(data.rating_repliegue) || playerToUpdate.rating_repliegue,
-        rating_ayuda_def: Number(data.rating_ayuda_def) || playerToUpdate.rating_ayuda_def,
-        rating_marcajes: Number(data.rating_marcajes) || playerToUpdate.rating_marcajes,
-        rating_dom_espacios: Number(data.rating_dom_espacios) || playerToUpdate.rating_dom_espacios,
-        rating_vigilancias: Number(data.rating_vigilancias) || playerToUpdate.rating_vigilancias,
-        rating_apoyos_off: Number(data.rating_apoyos_off) || playerToUpdate.rating_apoyos_off,
-        rating_desmarques: Number(data.rating_desmarques) || playerToUpdate.rating_desmarques,
-        rating_temporiz: Number(data.rating_temporiz) || playerToUpdate.rating_temporiz,
+        // Técnicas
+        rating_pase_corto:  avgRating('rating_pase_corto')  || playerToUpdate.rating_pase_corto,
+        rating_pase_largo:  avgRating('rating_pase_largo')  || playerToUpdate.rating_pase_largo,
+        rating_ctrl_balon:  avgRating('rating_ctrl_balon')  || playerToUpdate.rating_ctrl_balon,
+        rating_tiro:        avgRating('rating_tiro')        || playerToUpdate.rating_tiro,
+        rating_regate:      avgRating('rating_regate')      || playerToUpdate.rating_regate,
+        rating_conduc:      avgRating('rating_conduc')      || playerToUpdate.rating_conduc,
+        rating_superf_cont: avgRating('rating_superf_cont') || playerToUpdate.rating_superf_cont,
+        rating_despeje:     avgRating('rating_despeje')     || playerToUpdate.rating_despeje,
+        rating_entrada:     avgRating('rating_entrada')     || playerToUpdate.rating_entrada,
+        rating_pierna_menos:avgRating('rating_pierna_menos')|| playerToUpdate.rating_pierna_menos,
 
-        rating_liderazgo: Number(data.rating_liderazgo) || playerToUpdate.rating_liderazgo,
-        rating_caracter: Number(data.rating_caracter) || playerToUpdate.rating_caracter,
-        rating_competitiv: Number(data.rating_competitiv) || playerToUpdate.rating_competitiv,
-        rating_companerismo: Number(data.rating_companerismo) || playerToUpdate.rating_companerismo,
-        rating_mentalidad: Number(data.rating_mentalidad) || playerToUpdate.rating_mentalidad,
-        rating_agresividad: Number(data.rating_agresividad) || playerToUpdate.rating_agresividad,
-        rating_polivalencia: Number(data.rating_polivalencia) || playerToUpdate.rating_polivalencia,
-        rating_inteligencia: Number(data.rating_inteligencia) || playerToUpdate.rating_inteligencia,
-        rating_comunicacion: Number(data.rating_comunicacion) || playerToUpdate.rating_comunicacion,
-        rating_personalidad: Number(data.rating_personalidad) || playerToUpdate.rating_personalidad,
+        // Tácticas
+        rating_posic:        avgRating('rating_posic')        || playerToUpdate.rating_posic,
+        rating_cobertura:    avgRating('rating_cobertura')    || playerToUpdate.rating_cobertura,
+        rating_repliegue:    avgRating('rating_repliegue')    || playerToUpdate.rating_repliegue,
+        rating_ayuda_def:    avgRating('rating_ayuda_def')    || playerToUpdate.rating_ayuda_def,
+        rating_marcajes:     avgRating('rating_marcajes')     || playerToUpdate.rating_marcajes,
+        rating_dom_espacios: avgRating('rating_dom_espacios') || playerToUpdate.rating_dom_espacios,
+        rating_vigilancias:  avgRating('rating_vigilancias')  || playerToUpdate.rating_vigilancias,
+        rating_apoyos_off:   avgRating('rating_apoyos_off')   || playerToUpdate.rating_apoyos_off,
+        rating_desmarques:   avgRating('rating_desmarques')   || playerToUpdate.rating_desmarques,
+        rating_temporiz:     avgRating('rating_temporiz')     || playerToUpdate.rating_temporiz,
 
-        rating_juego_aereo: Number(data.rating_juego_aereo) || playerToUpdate.rating_juego_aereo,
-        
+        // Cognitivas
+        rating_liderazgo:    avgRating('rating_liderazgo')    || playerToUpdate.rating_liderazgo,
+        rating_caracter:     avgRating('rating_caracter')     || playerToUpdate.rating_caracter,
+        rating_competitiv:   avgRating('rating_competitiv')   || playerToUpdate.rating_competitiv,
+        rating_companerismo: avgRating('rating_companerismo') || playerToUpdate.rating_companerismo,
+        rating_mentalidad:   avgRating('rating_mentalidad')   || playerToUpdate.rating_mentalidad,
+        rating_agresividad:  avgRating('rating_agresividad')  || playerToUpdate.rating_agresividad,
+        rating_polivalencia: avgRating('rating_polivalencia') || playerToUpdate.rating_polivalencia,
+        rating_inteligencia: avgRating('rating_inteligencia') || playerToUpdate.rating_inteligencia,
+        rating_comunicacion: avgRating('rating_comunicacion') || playerToUpdate.rating_comunicacion,
+        rating_personalidad: avgRating('rating_personalidad') || playerToUpdate.rating_personalidad,
+
+        // Específicas
+        rating_juego_aereo: avgRating('rating_juego_aereo') || playerToUpdate.rating_juego_aereo,
+
         updated_at: new Date().toISOString()
       };
 
@@ -664,9 +838,10 @@ export default function App() {
       player: players.find(p => p.id === selectedPlayer.id) || selectedPlayer,
       reports: reports.filter(r => r.player_id === selectedPlayer.id),
       matches: matches.filter(m => (m.observed_players_ids || []).includes(selectedPlayer.id)),
-      videos: videos.filter(v => v.player_id === selectedPlayer.id)
+      videos: videos.filter(v => v.player_id === selectedPlayer.id),
+      history: history.filter(h => h.player_id === selectedPlayer.id)
     };
-  }, [selectedPlayer, players, reports, matches, videos]);
+  }, [selectedPlayer, players, reports, matches, videos, history]);
 
   const matchDetailProps = useMemo(() => {
     if (!selectedMatch) return null;
@@ -685,6 +860,7 @@ export default function App() {
         reports={playerDetailProps.reports}
         matches={playerDetailProps.matches}
         videos={playerDetailProps.videos}
+        history={playerDetailProps.history}
         initialTab={selectedPlayerTab}
         onBack={() => {
           setSelectedPlayer(null);
@@ -706,10 +882,24 @@ export default function App() {
         videos={matchDetailProps.videos}
         onBack={() => setActiveTab('matches')}
         onAddPlayer={() => setIsQuickAddOpen(true)}
+        onLinkPlayer={() => setIsLinkPlayerOpen(true)}
+        onUnlinkPlayer={handleUnlinkPlayerFromMatch}
         onCreateReport={(pId) => handleCreateReport(pId, selectedMatch.id)}
         onAddVideo={(v) => handleAddVideo({ ...v, match_id: selectedMatch.id })}
         onSelectPlayer={handleSelectPlayer}
       />;
+    }
+
+    if (activeTab === 'club_detail' && selectedClub) {
+      return (
+        <ClubDetail
+          clubName={selectedClub}
+          onBack={() => {
+            setSelectedClub(null);
+            setActiveTab('teams');
+          }}
+        />
+      );
     }
 
     if (activeTab === 'report_form') {
@@ -747,12 +937,19 @@ export default function App() {
           onNewPlayer={() => setIsQuickAddOpen(true)} 
         />;
       case 'teams':
-        return <TeamList />;
+        return (
+          <ClubList
+            onSelectClub={(name) => {
+              setSelectedClub(name);
+              setActiveTab('club_detail');
+            }}
+          />
+        );
       case 'matches':
         return <MatchList 
           matches={matches} 
           onSelectMatch={handleSelectMatch}
-          onNewMatch={() => {}} // TODO
+          onNewMatch={() => setIsNewMatchOpen(true)}
         />;
       case 'reports':
         return <ReportList 
@@ -765,6 +962,8 @@ export default function App() {
           onMergeReports={handleMergeReports}
           onSelectPlayer={handleSelectPlayer}
         />;
+      case 'comparativas':
+        return <Comparativas players={players} />;
       case 'settings':
       case 'users':
         return <SettingsPanel />;
@@ -786,33 +985,33 @@ export default function App() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} role={userRole} />
       
       <main className="flex-1 min-w-0 flex flex-col lg:h-screen bg-dot-pattern">
-        <header className="h-20 border-b border-slate-800 flex items-center justify-between px-10 shrink-0 bg-slate-950/40 backdrop-blur-xl sticky top-0 z-30">
-          <div className="flex items-center gap-4">
-             <div className="flex items-center gap-3 lg:hidden">
-                <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center font-black text-emerald-500 italic border border-slate-800">U</div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-slate-100 italic">U.D. SANTA MARIÑA</h2>
-             </div>
-             <div className="hidden lg:flex items-center gap-3">
-                <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[9px] font-black text-slate-500 uppercase tracking-widest">System</div>
-                <div className="text-slate-800">/</div>
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">{activeTab}</span>
-             </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-black text-slate-100 uppercase tracking-widest mb-0.5">Admin Session</p>
-              <div className="flex items-center justify-end gap-2">
-                <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter opacity-80">Online Tracking</p>
-              </div>
+        <header className="border-b border-slate-800/80 flex flex-col bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
+          <div className="h-16 flex items-center justify-between px-4 md:px-8 lg:px-10 shrink-0">
+            {/* Izquierda: breadcrumb */}
+            <div className="flex items-center gap-4">
+               <div className="flex items-center gap-2.5 lg:hidden">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-slate-950 italic shadow-lg shadow-emerald-500/20">U</div>
+                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-100 italic leading-none">U.D. Santa Mariña</h2>
+               </div>
+               <div className="hidden lg:flex items-center gap-3">
+                  <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[9px] font-black text-slate-500 uppercase tracking-widest">Sistema</div>
+                  <div className="text-slate-800">/</div>
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">{activeTab}</span>
+               </div>
             </div>
+            {/* Centro: seguimiento activo */}
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-widest hidden sm:flex">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Seguimiento Activo
+            </div>
+            {/* Derecha: avatar */}
             <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-slate-100 italic cursor-pointer hover:border-emerald-500/50 transition-all shadow-inner">
-              AU
+              AS
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 pb-28 lg:pb-10">
           <div className="max-w-7xl mx-auto">
             {renderContent()}
           </div>
@@ -820,7 +1019,7 @@ export default function App() {
 
         <button 
           onClick={() => setIsQuickAddOpen(true)}
-          className="lg:hidden fixed bottom-6 right-6 w-14 h-14 bg-emerald-600 text-slate-900 rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-95 transition-transform"
+          className="lg:hidden fixed bottom-20 right-5 w-14 h-14 bg-emerald-600 text-slate-900 rounded-full shadow-2xl shadow-emerald-500/30 flex items-center justify-center z-40 active:scale-95 transition-transform"
         >
           <Plus size={28} strokeWidth={3} />
         </button>
@@ -836,6 +1035,20 @@ export default function App() {
         initialData={editingPlayer}
         matches={matches}
         currentMatchId={selectedMatch?.id}
+      />
+
+      <LinkPlayerModal
+        isOpen={isLinkPlayerOpen}
+        onClose={() => setIsLinkPlayerOpen(false)}
+        allPlayers={players}
+        alreadyLinkedIds={selectedMatch?.observed_players_ids || []}
+        onLink={handleLinkPlayerToMatch}
+      />
+
+      <NewMatchModal
+        isOpen={isNewMatchOpen}
+        onClose={() => setIsNewMatchOpen(false)}
+        onSave={handleSaveMatch}
       />
     </div>
   );

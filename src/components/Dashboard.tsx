@@ -5,7 +5,7 @@ import {
   Users, ClipboardList, Shield, Trophy, CheckCircle2, XCircle, Clock, MapPin, MousePointer2, User, FileText, Play
 } from 'lucide-react';
 import { Player, Match, Report, Video as VideoType } from '../types';
-import { cn, formatRating, getStatusColor } from '../lib/utils';
+import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -42,20 +42,21 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
 
   const categoryDistribution = useMemo(() => {
     const dist: Record<string, number> = { 
-      'cat-senior': 0, 'cat-juvenil': 0, 'cat-cadete': 0, 
-      'cat-infantil': 0, 'cat-alevin': 0, 'cat-benjamin': 0, 'cat-prebenjamin': 0 
+      'SENIOR': 0, 'JUVENIL': 0, 'CADETE': 0, 
+      'INFANTIL': 0, 'ALEVÍN': 0, 'BENJAMÍN': 0, 'PRE-BENJAMÍN': 0 
     };
     players.forEach(p => {
       if (!p) return;
-      if (dist[p.category_id] !== undefined) dist[p.category_id]++;
-      else dist['cat-senior']++;
+      const cat = calculateCategory(p.birth_year);
+      if (dist[cat] !== undefined) dist[cat]++;
+      else dist['SENIOR']++;
     });
     return [
-      { name: 'Senior', value: dist['cat-senior'], color: '#8b5cf6' },
-      { name: 'Juvenil', value: dist['cat-juvenil'], color: '#ec4899' },
-      { name: 'Cadete', value: dist['cat-cadete'], color: '#06b6d4' },
-      { name: 'Infantil', value: dist['cat-infantil'], color: '#f87171' },
-      { name: 'Alevin+', value: dist['cat-alevin'] + dist['cat-benjamin'] + dist['cat-prebenjamin'], color: '#fbbf24' }
+      { name: 'Senior', value: dist['SENIOR'], color: '#8b5cf6' },
+      { name: 'Juvenil', value: dist['JUVENIL'], color: '#ec4899' },
+      { name: 'Cadete', value: dist['CADETE'], color: '#06b6d4' },
+      { name: 'Infantil', value: dist['INFANTIL'], color: '#f87171' },
+      { name: 'Alevin+', value: dist['ALEVÍN'] + dist['BENJAMÍN'] + dist['PRE-BENJAMÍN'], color: '#fbbf24' }
     ];
   }, [players]);
 
@@ -254,11 +255,12 @@ export const Dashboard = memo(function Dashboard({
           </h1>
         </motion.div>
         
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-widest">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live Sync
-          </div>
+        <div className="flex items-end pb-1">
+          <img
+            src="/assets/udosantamarina.png"
+            alt="U.D. Santa Mariña"
+            className="h-24 w-24 object-contain drop-shadow-2xl"
+          />
         </div>
       </div>
 
@@ -270,7 +272,7 @@ export const Dashboard = memo(function Dashboard({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             onClick={() => onTabChange(stat.id === 'stars' ? 'players' : stat.id as any)}
-            className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-[2rem] cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between"
+            className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-[2rem] cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between h-48"
           >
             <div className={cn("w-10 h-10 rounded-xl mb-4 flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
               <stat.icon size={18} className={stat.color} />
@@ -309,7 +311,7 @@ export const Dashboard = memo(function Dashboard({
                   >
                     <div className="flex items-center gap-4 mb-4">
                       <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-amber-500/50 transition-colors flex items-center justify-center font-black text-amber-500 italic">
-                        {player?.full_name[0]}
+                        AS
                       </div>
                       <div className="min-w-0">
                         <p className="text-[11px] font-black text-white italic tracking-tight uppercase truncate">{player?.full_name}</p>
@@ -391,7 +393,7 @@ export const Dashboard = memo(function Dashboard({
                   className="flex items-center gap-4 group cursor-pointer p-3 rounded-2xl hover:bg-blue-500/[0.05] transition-all active:scale-95"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-blue-500 text-lg group-hover:border-blue-500/50 transition-colors shadow-inner shrink-0">
-                    {player.full_name[0]}
+                    AS
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-black text-white italic tracking-tight uppercase truncate">{player.full_name}</h4>
