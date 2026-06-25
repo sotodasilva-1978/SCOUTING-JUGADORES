@@ -303,8 +303,8 @@ export const MOCK_REPORTS: Report[] = [
     created_at: new Date().toISOString(),
     technical_comment: 'Excelente control orientado y visión de juego.',
     tactical_comment: 'Gran lectura de espacios y ocupación racional del terreno.',
-    strengths: 'Velocidad, Visión',
-    weaknesses: 'Fuerza física',
+    strengths: ['Velocidad', 'Visión'],
+    weaknesses: ['Fuerza física'],
   }))
 ];
 

@@ -84,7 +84,7 @@ const COLOR_B = { stroke: '#fb7185', fill: 'rgba(251,113,133,0.25)', badge: '#4c
 
 // ── Radar superpuesto ────────────────────────────────────────────────────────
 
-function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player | null }) {
+function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player | null; key?: string }) {
   const area = AREAS[areaKey];
   const W = 480, H = 520;
   const cx = W / 2, cy = H / 2 + 10;
@@ -213,7 +213,7 @@ function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA
 
 // ── Barra de duelo por atributo ──────────────────────────────────────────────
 
-function DuelBar({ label, valA, valB }: { label: string; valA: number; valB: number }) {
+function DuelBar({ label, valA, valB }: { label: string; valA: number; valB: number; key?: string }) {
   const pctA = Math.round((valA / 5) * 100);
   const pctB = Math.round((valB / 5) * 100);
   const winA = pctA > pctB;
@@ -269,7 +269,7 @@ function DuelBar({ label, valA, valB }: { label: string; valA: number; valB: num
 
 // ── Sección de duelo por área ────────────────────────────────────────────────
 
-function DuelSection({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player }) {
+function DuelSection({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player; key?: string }) {
   const area = AREAS[areaKey];
 
   const getVal = (p: Player, field: string) =>
@@ -333,7 +333,7 @@ type ProfileFieldDef = {
   isRating?: boolean;
 };
 
-function ProfileRow({ label, valA, valB, unit = '', compareAs = 'none', isRating = false }: ProfileFieldDef) {
+function ProfileRow({ label, valA, valB, unit = '', compareAs = 'none', isRating = false }: ProfileFieldDef & { key?: string }) {
   const numA = typeof valA === 'number' ? valA : undefined;
   const numB = typeof valB === 'number' ? valB : undefined;
 
@@ -712,7 +712,7 @@ export function Comparativas({ players }: ComparativasProps) {
       {/* Encabezado */}
       <div>
         <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic">Análisis Visual</p>
-        <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter leading-none mt-1">COMPARATIVAS</h1>
+        <h1 className="text-3xl md:text-4xl font-black text-white uppercase italic tracking-tighter leading-none mt-1">COMPARATIVAS</h1>
         <p className="text-[11px] text-slate-500 font-semibold mt-1">
           Selecciona dos jugadores y compara sus atributos en modo duelo.
         </p>

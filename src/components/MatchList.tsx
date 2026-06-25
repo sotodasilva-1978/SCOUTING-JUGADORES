@@ -12,14 +12,15 @@ interface MatchListProps {
 export function MatchList({ matches, onSelectMatch, onNewMatch }: MatchListProps) {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-100 tracking-tight">Partidos Observados</h1>
-          <p className="text-slate-500 font-medium">Gestiona y analiza los encuentros grabados</p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-5 border-b border-slate-800/50">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] italic">Agenda</p>
+          <h1 className="text-2xl md:text-3xl font-black text-white uppercase italic tracking-tighter leading-none mt-1">Partidos Observados</h1>
+          <p className="text-slate-500 font-medium text-xs md:text-sm mt-1.5">Gestiona y analiza los encuentros grabados</p>
         </div>
         <button
           onClick={onNewMatch}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 active:scale-95"
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 md:px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 active:scale-95 whitespace-nowrap"
         >
           <Calendar size={18} />
           Nuevo Partido

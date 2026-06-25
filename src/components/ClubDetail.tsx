@@ -253,7 +253,7 @@ export function ClubDetail({ clubName, onBack }: Props) {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-slate-100 leading-tight">{clubName}</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Editor de club</p>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Editor de club</p>
         </div>
       </div>
 

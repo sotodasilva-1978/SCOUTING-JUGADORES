@@ -227,17 +227,17 @@ export function ReportForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto pb-40">
-      <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-950/90 backdrop-blur-xl py-6 z-40 border-b border-slate-800/80 gap-6">
-        <div className="flex items-center gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-950/90 backdrop-blur-xl py-4 md:py-6 z-40 border-b border-slate-800/80 gap-4 md:gap-6">
+        <div className="flex items-center gap-4 md:gap-6 min-w-0">
           <button 
             type="button"
             onClick={onCancel}
-            className="p-3.5 bg-slate-900 border border-slate-800 rounded-[1.2rem] text-slate-400 hover:text-white transition-all hover:bg-slate-800 shadow-xl"
+            className="p-3 md:p-3.5 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 hover:text-white transition-all hover:bg-slate-800 shadow-xl shrink-0"
           >
             <ArrowLeft size={20} />
           </button>
-          <div className="space-y-0.5">
-            <h1 className="text-2xl font-black text-slate-100 italic tracking-tighter flex items-center gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <h1 className="text-lg md:text-2xl font-black text-slate-100 italic tracking-tighter flex flex-wrap items-center gap-2 md:gap-3">
               EDITOR DE INFORME
               <span className={cn(
                 "text-[10px] not-italic px-3 py-1 rounded-full border",
@@ -252,7 +252,7 @@ export function ReportForm({
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4">
           <div className="bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 flex shadow-inner">
             <button
               type="button"
@@ -280,7 +280,7 @@ export function ReportForm({
           
           <button 
             type="submit"
-            className="bg-slate-100 hover:bg-white text-slate-950 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 shadow-2xl active:scale-95 group"
+            className="bg-slate-100 hover:bg-white text-slate-950 px-5 md:px-8 py-3.5 md:py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 md:gap-3 shadow-2xl active:scale-95 group whitespace-nowrap"
           >
             <Save size={18} className="group-hover:scale-110 transition-transform" />
             Finalizar

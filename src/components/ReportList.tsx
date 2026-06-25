@@ -1,3 +1,4 @@
+import type React from 'react';
 import { 
   Search, Filter, ChevronRight, Calendar, User, Smartphone, 
   Monitor, Trash2, Edit2, Copy, CheckSquare, Square, Merge

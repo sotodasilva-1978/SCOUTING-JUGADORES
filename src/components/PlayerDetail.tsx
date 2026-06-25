@@ -505,18 +505,18 @@ export function PlayerDetail({
   return (
     <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-right-4 duration-500">
       {/* HEADER FIJO */}
-      <div className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-6 shadow-2xl">
+      <div className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-xl border border-slate-800 rounded-3xl md:rounded-[2.5rem] p-4 md:p-6 shadow-2xl">
         <div className="flex flex-col xl:flex-row gap-6 items-start">
-          <div className="flex items-center gap-6 flex-1">
+          <div className="flex items-center gap-4 md:gap-6 flex-1 min-w-0">
             <button 
               onClick={onBack}
-              className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white transition-all shadow-inner"
+              className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white transition-all shadow-inner shrink-0"
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="relative group/avatar">
+            <div className="relative group/avatar shrink-0">
               <div
-                className="w-20 h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-3xl text-emerald-500 shadow-2xl overflow-hidden cursor-pointer"
+                className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-2xl md:text-3xl text-emerald-500 shadow-2xl overflow-hidden cursor-pointer"
                 onClick={() => uploadPhase === 'idle' && fileInputRef.current?.click()}
                 title="Haz clic para cambiar la foto"
               >
@@ -532,12 +532,15 @@ export function PlayerDetail({
               </div>
               <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(player.status))} />
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-black text-white uppercase tracking-tighter">{player.full_name}</h1>
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tighter">{player.full_name}</h1>
                 <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.2em] shadow-sm", getStatusColor(player.status))}>
                    {PLAYER_STATUS_OPTIONS.find(o => o.value === player.status)?.label || player.status}
                 </div>
+                {player.ref_code && (
+                  <span className="ref-chip"><span className="text-slate-600 mr-1">ID</span>{player.ref_code}</span>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 text-sm font-bold">
                 <span className="text-emerald-500">{player.club_name}</span>

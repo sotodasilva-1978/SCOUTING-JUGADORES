@@ -235,7 +235,6 @@ export function ClubList({ onSelectClub }: { onSelectClub: (clubName: string) =>
                   <h3 className="text-sm font-black text-slate-100 group-hover:text-emerald-400 transition-colors uppercase tracking-tight leading-snug break-words">
                     {club.name}
                   </h3>
-                  {club.ref_code && <span className="ref-chip mt-1.5">{club.ref_code}</span>}
                   {club.location ? (
                     <div className="flex items-center gap-1.5 mt-1.5 text-slate-500 text-[11px] font-semibold">
                       <MapPin size={11} className="shrink-0" />

@@ -9,6 +9,7 @@ interface NavItemProps {
   isActive: boolean;
   onClick: () => void;
   collapsed?: boolean;
+  key?: string;
 }
 
 function NavItem({ icon: Icon, label, isActive, onClick, collapsed }: NavItemProps) {
@@ -93,7 +94,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
           {!isCollapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0">
               <span className="font-black text-[15px] text-white italic tracking-tighter block leading-none uppercase truncate">U.D. Santa Mariña</span>
-              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.28em] block mt-1">Pro Scout</span>
+              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.28em] block mt-1">AS Pro Scout</span>
             </motion.div>
           )}
         </div>

@@ -242,24 +242,28 @@ export const Dashboard = memo(function Dashboard({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-1000 pb-20">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-800/50">
+      <div className="flex flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800/50">
         <motion.div
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
+           className="min-w-0"
         >
-          <h1 className="text-6xl font-black text-white tracking-tighter italic uppercase leading-[0.85]">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.25em] mb-3">
+            AS PRO SCOUT
+          </span>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter italic uppercase leading-[0.85]">
             U.D. SANTA MARIÑA
-            <span className="block text-emerald-500 text-2xl mt-4 not-italic font-black tracking-[0.3em] uppercase opacity-90">
-              - AS SCOUT -
+            <span className="block text-emerald-500 text-base sm:text-lg md:text-2xl mt-2 md:mt-4 not-italic font-black tracking-[0.25em] md:tracking-[0.3em] uppercase opacity-90">
+              Centro de Operaciones
             </span>
           </h1>
         </motion.div>
-        
-        <div className="flex items-end pb-1">
+
+        <div className="flex items-center shrink-0">
           <img
             src="/assets/udosantamarina.png"
             alt="U.D. Santa Mariña"
-            className="h-24 w-24 object-contain drop-shadow-2xl"
+            className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 object-contain drop-shadow-2xl"
           />
         </div>
       </div>
@@ -272,14 +276,14 @@ export const Dashboard = memo(function Dashboard({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             onClick={() => onTabChange(stat.id === 'stars' ? 'players' : stat.id as any)}
-            className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-[2rem] cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between h-48"
+            className="bg-slate-900/40 border border-slate-800/80 p-4 md:p-5 rounded-3xl cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between h-32 md:h-48"
           >
-            <div className={cn("w-10 h-10 rounded-xl mb-4 flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
+            <div className={cn("w-9 h-9 md:w-10 md:h-10 rounded-xl mb-3 md:mb-4 flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
               <stat.icon size={18} className={stat.color} />
             </div>
             <div>
-              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">{stat.label}</p>
-              <p className="text-3xl font-black text-white italic tabular-nums leading-none mt-1">{stat.value}</p>
+              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest leading-tight">{stat.label}</p>
+              <p className="text-2xl md:text-3xl font-black text-white italic tabular-nums leading-none mt-1">{stat.value}</p>
             </div>
           </motion.div>
         ))}

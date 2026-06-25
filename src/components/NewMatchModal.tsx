@@ -1,4 +1,5 @@
-﻿import { X, Calendar, Trophy, MapPin, Tag } from 'lucide-react';
+﻿import type React from 'react';
+import { X, Calendar, Trophy, MapPin, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 

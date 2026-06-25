@@ -1,3 +1,4 @@
+import type React from 'react';
 import { Shield, Users, Mail, Bell, Key, Database, RefreshCw, Save, Trash2, CheckCircle, AlertCircle, UserPlus, Sliders, Upload } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';

@@ -230,10 +230,26 @@ export default function App() {
     if (!isValidUUID(cleaned.id)) delete cleaned.id;
     
     // Fix foreign keys
-    if (cleaned.club_id && !isValidUUID(cleaned.club_id)) {
-      const { data: clubs } = await supabase.from('clubs').select('id').limit(1);
-      if (clubs && clubs[0]) cleaned.club_id = clubs[0].id;
-      else delete cleaned.club_id;
+    // club_id debe corresponder al CLUB REAL del jugador (club_name), NUNCA al
+    // primer club que exista. Si no hay un UUID válido, lo resolvemos por nombre
+    // (buscar-o-crear) para que cada club tenga su propio id.
+    if (!isValidUUID(cleaned.club_id)) {
+      delete cleaned.club_id;
+      const clubName = (cleaned.club_name || '').trim();
+      if (clubName) {
+        const { data: existing } = await supabase
+          .from('clubs').select('id').ilike('name', clubName).limit(1);
+        if (existing && existing[0]) {
+          cleaned.club_id = existing[0].id;
+        } else {
+          const { data: created } = await supabase
+            .from('clubs')
+            .insert({ name: clubName, current_season: '2026/2027' })
+            .select('id')
+            .single();
+          if (created) cleaned.club_id = created.id;
+        }
+      }
     }
     
     if (cleaned.current_team_id && !isValidUUID(cleaned.current_team_id)) {
@@ -421,6 +437,7 @@ export default function App() {
         has_video: !!newPlayerData.videoUrl,
         has_images: false,
         possible_duplicate: false,
+        created_by: '',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
