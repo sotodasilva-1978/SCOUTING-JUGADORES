@@ -159,6 +159,8 @@ interface ReportFormProps {
   matches: Match[];
   onSave: (data: Partial<Report> & Partial<Player>) => void;
   onCancel: () => void;
+  userRole?: string;
+  userId?: string;
 }
 
 export function ReportForm({ 
@@ -236,17 +238,17 @@ export function ReportForm({
           >
             <ArrowLeft size={20} />
           </button>
-          <div className="space-y-0.5 min-w-0">
-            <h1 className="text-lg md:text-2xl font-black text-slate-100 italic tracking-tighter flex flex-wrap items-center gap-2 md:gap-3">
+          <div className="space-y-1.5 min-w-0">
+            <h1 className="text-lg md:text-2xl font-black text-slate-100 italic tracking-tighter">
               EDITOR DE INFORME
-              <span className={cn(
-                "text-[10px] not-italic px-3 py-1 rounded-full border",
-                editorMode === 'RAPID' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-blue-500/10 text-blue-500 border-blue-500/20"
-              )}>
-                {editorMode === 'RAPID' ? 'PIE DE CAMPO' : 'ANÁLISIS POSTERIORI'}
-              </span>
             </h1>
-            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest px-1">
+            <span className={cn(
+              "inline-block text-[10px] font-black not-italic px-3 py-1 rounded-full border",
+              editorMode === 'RAPID' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-blue-500/10 text-blue-500 border-blue-500/20"
+            )}>
+              {editorMode === 'RAPID' ? 'PIE DE CAMPO' : 'ANÁLISIS POSTERIORI'}
+            </span>
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest px-1 mt-1">
               {selectedPlayer ? selectedPlayer.full_name : 'Nuevo Registro'} • {formData.report_date}
             </p>
           </div>

@@ -4,22 +4,24 @@ import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, so
 import { memo, useMemo, useState, ReactNode } from 'react';
 import { Player } from '../types';
 
-export const PlayerList = memo(function PlayerList({ 
-  players, 
-  onSelectPlayer, 
-  onNewPlayer, 
-  onDeletePlayer 
-}: { 
-  players: Player[], 
-  onSelectPlayer: (player: Player, tab?: string) => void, 
+export const PlayerList = memo(function PlayerList({
+  players,
+  onSelectPlayer,
+  onNewPlayer,
+  onDeletePlayer,
+  initialClubFilter,
+}: {
+  players: Player[],
+  onSelectPlayer: (player: Player, tab?: string) => void,
   onNewPlayer: () => void,
-  onDeletePlayer?: (id: string) => void
+  onDeletePlayer?: (id: string) => void,
+  initialClubFilter?: string,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [posFilter, setPosFilter] = useState('ALL');
   const [catFilter, setCatFilter] = useState('ALL');
-  const [clubFilter, setClubFilter] = useState('ALL');
+  const [clubFilter, setClubFilter] = useState(initialClubFilter || 'ALL');
   const [ratingFilter, setRatingFilter] = useState('ALL');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [activeHeaderMenu, setActiveHeaderMenu] = useState<string | null>(null);

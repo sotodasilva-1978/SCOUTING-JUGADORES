@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { UserRole } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -110,4 +111,68 @@ export function calculateCategory(birthYear: number): string {
   if (age >= 8) return 'BENJAMÍN';
   if (age >= 6) return 'PRE-BENJAMÍN';
   return 'DEBUTANTE';
+}
+
+// ─── Helpers de formato de juego ─────────────────────────────────────────────
+
+const F11_CATS = ['JUVENIL', 'CADETE', 'INFANTIL'];
+const F8_CATS = ['ALEVÍN', 'ALEVIN', 'BENJAMÍN', 'BENJAMIN', 'PRE-BENJAMÍN', 'PRE-BENJAMIN'];
+
+export function isF11Category(cat: string): boolean {
+  return F11_CATS.some(c => cat.toUpperCase() === c);
+}
+
+export function isF8Category(cat: string): boolean {
+  return F8_CATS.some(c => cat.toUpperCase() === c);
+}
+
+// ─── Helpers de permisos ─────────────────────────────────────────────────────
+
+const SCOUT_ROLES: UserRole[] = ['SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
+
+export function isScoutRole(role: UserRole): boolean {
+  return SCOUT_ROLES.includes(role);
+}
+
+export function canCreatePlayer(role: UserRole): boolean {
+  return ['ADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
+}
+
+export function canEditPlayer(role: UserRole, createdBy: string, userId: string): boolean {
+  if (['ADMIN', 'COORD', 'ENTREN'].includes(role)) return true;
+  if (isScoutRole(role)) return createdBy === userId;
+  return false;
+}
+
+export function canDeletePlayer(role: UserRole): boolean {
+  return role === 'ADMIN';
+}
+
+export function canCreateReport(role: UserRole): boolean {
+  return ['ADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
+}
+
+export function canEditReport(role: UserRole, observerId: string, userId: string): boolean {
+  if (['ADMIN', 'COORD'].includes(role)) return true;
+  if (['ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role)) return observerId === userId;
+  return false;
+}
+
+export function canPrintReport(role: UserRole): boolean {
+  return ['ADMIN', 'COORD', 'PRESID'].includes(role);
+}
+
+export function getRoleLabel(role: UserRole): string {
+  const labels: Record<UserRole, string> = {
+    ADMIN:     'Administrador',
+    COORD:     'Coordinador',
+    COORD_F11: 'Coordinador F11',
+    COORD_F8:  'Coordinador F8',
+    PRESID:    'Presidente',
+    ENTREN:    'Entrenador',
+    SCOUT:     'Scout General',
+    SCOUT_F11: 'Scout F11',
+    SCOUT_F8:  'Scout F8',
+  };
+  return labels[role] || role;
 }

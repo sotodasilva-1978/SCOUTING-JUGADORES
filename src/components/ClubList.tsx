@@ -25,7 +25,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   'PRE-BENJAMÍN': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
 };
 
-export function ClubList({ onSelectClub }: { onSelectClub: (clubName: string) => void }) {
+export function ClubList({ onSelectClub, onViewPlayers }: {
+  onSelectClub: (clubName: string) => void;
+  onViewPlayers?: (clubName: string) => void;
+}) {
   const [clubs, setClubs] = useState<ClubCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -260,12 +263,26 @@ export function ClubList({ onSelectClub }: { onSelectClub: (clubName: string) =>
 
               {/* Footer */}
               <div className="mt-auto px-6 py-3 border-t border-slate-800/50 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <Users size={12} />
-                  <span className="text-[10px] font-black uppercase tracking-tighter">
-                    {club.total_players} jugador{club.total_players !== 1 ? 'es' : ''}
-                  </span>
-                </div>
+                {/* Jugadores — clickable independiente */}
+                {onViewPlayers && club.total_players > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onViewPlayers(club.name); }}
+                    className="flex items-center gap-1.5 text-slate-500 hover:text-emerald-400 transition-colors group/btn"
+                  >
+                    <Users size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter group-hover/btn:underline underline-offset-2">
+                      {club.total_players} jugador{club.total_players !== 1 ? 'es' : ''}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <Users size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">
+                      {club.total_players} jugador{club.total_players !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-1 text-slate-600 group-hover:text-emerald-400 transition-colors">
                   <span className="text-[9px] font-black uppercase tracking-wider">Ver club</span>
                   <ChevronRight size={12} />

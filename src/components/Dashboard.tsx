@@ -91,7 +91,7 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             <div className="w-24 h-24 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={positionDistribution} innerRadius={28} outerRadius={40} paddingAngle={6} dataKey="value" stroke="none">
+                  <Pie data={positionDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {positionDistribution.map((entry, index) => <Cell key={`cell-p-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
@@ -99,14 +99,12 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             </div>
             <div className="w-full">
               <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Posiciones</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex flex-col gap-1.5">
                 {positionDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
-                    </div>
-                    <span className="text-[10px] font-black text-slate-200">{item.value}</span>
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
               </div>
@@ -120,7 +118,7 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             <div className="w-24 h-24 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={categoryDistribution} innerRadius={28} outerRadius={40} paddingAngle={6} dataKey="value" stroke="none">
+                  <Pie data={categoryDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {categoryDistribution.map((entry, index) => <Cell key={`cell-c-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
@@ -128,14 +126,12 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             </div>
             <div className="w-full">
               <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Niveles</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex flex-col gap-1.5">
                 {categoryDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
-                    </div>
-                    <span className="text-[10px] font-black text-slate-200">{item.value}</span>
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
               </div>
@@ -149,7 +145,7 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             <div className="w-24 h-24 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={statusDistribution} innerRadius={28} outerRadius={40} paddingAngle={6} dataKey="value" stroke="none">
+                  <Pie data={statusDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {statusDistribution.map((entry, index) => <Cell key={`cell-s-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
@@ -157,14 +153,12 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
             </div>
             <div className="w-full">
               <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Estatus</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex flex-col gap-1.5">
                 {statusDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
-                    </div>
-                    <span className="text-[10px] font-black text-slate-200">{item.value}</span>
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
               </div>

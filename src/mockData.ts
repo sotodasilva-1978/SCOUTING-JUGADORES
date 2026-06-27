@@ -328,7 +328,7 @@ export const MOCK_USERS: Profile[] = [
     user_id: 'au-1',
     full_name: 'Scout Principal',
     email: 'scout@club.com',
-    role: 'SUPERADMIN',
+    role: 'ADMIN',
     club_id: 'club-1',
     active: true,
     created_at: new Date().toISOString(),

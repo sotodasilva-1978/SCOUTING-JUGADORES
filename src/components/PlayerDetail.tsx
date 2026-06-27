@@ -1,14 +1,14 @@
-import { 
-  ArrowLeft, User, Star, Video, ClipboardList, Shield, Edit3, Trash2, 
-  Calendar, Target, Zap, AlertCircle, ChevronRight, Plus, Trophy, 
+import {
+  ArrowLeft, User, Star, Video, ClipboardList, Shield, Edit3, Trash2,
+  Calendar, Target, Zap, AlertCircle, ChevronRight, Plus, Trophy,
   History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
   TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
   MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
-  LayoutDashboard, Smartphone, Monitor
+  LayoutDashboard, Smartphone, Monitor, Mic
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
-import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/utils';
+import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
 import { useMemo, useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { uploadPlayerPhoto } from '../lib/supabase';
 import { format } from 'date-fns';
@@ -219,10 +219,41 @@ interface PlayerDetailProps {
   onAddVideo: (video: { url: string; title: string }) => void;
   onUpdatePlayer?: (player: Player) => void;
   initialTab?: string;
+  userRole?: string;
+  userId?: string;
 }
 
-export function PlayerDetail({ 
-  player, 
+function SpeechToTextButton({ onTranscript, className }: { onTranscript: (text: string) => void; className?: string }) {
+  const [isListening, setIsListening] = useState(false);
+
+  const start = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert('Tu navegador no soporta reconocimiento de voz.'); return; }
+    try {
+      const r = new SR();
+      r.lang = 'es-ES'; r.continuous = false; r.interimResults = false;
+      r.onstart  = () => setIsListening(true);
+      r.onend    = () => setIsListening(false);
+      r.onerror  = () => setIsListening(false);
+      r.onresult = (e: any) => onTranscript(e.results[0][0].transcript);
+      r.start();
+    } catch { setIsListening(false); }
+  };
+
+  return (
+    <button type="button" onClick={start} title="Dictado por voz"
+      className={cn(
+        'p-2 rounded-lg transition-all flex items-center justify-center',
+        isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700',
+        className
+      )}>
+      <Mic size={13} className={cn(isListening && 'animate-bounce')} />
+    </button>
+  );
+}
+
+export function PlayerDetail({
+  player,
   reports, 
   matches, 
   videos, 
@@ -314,11 +345,50 @@ export function PlayerDetail({
     }
   };
 
+  // Calcula la media de un grupo de campos (solo los que tienen valor > 0)
+  const avgFields = (data: Partial<Player>, fields: (keyof Player)[]): number | undefined => {
+    const vals = fields.map(f => Number(data[f]) || 0).filter(v => v > 0);
+    if (vals.length === 0) return undefined;
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+  };
+
+  // Las 4 áreas calculadas automáticamente desde los ratings de la Ficha Scouting
+  const AREA_FIELDS = {
+    physical:  ['rating_velo_despl','rating_acel','rating_fuerza','rating_resis','rating_agil','rating_coord','rating_velo_reac','rating_poten','rating_recup_fatiga','rating_tenden_lesion'] as (keyof Player)[],
+    technical: ['rating_pase_corto','rating_pase_largo','rating_ctrl_balon','rating_tiro','rating_regate','rating_conduc','rating_superf_cont','rating_despeje','rating_entrada','rating_pierna_menos'] as (keyof Player)[],
+    tactical:  ['rating_posic','rating_cobertura','rating_repliegue','rating_ayuda_def','rating_marcajes','rating_dom_espacios','rating_vigilancias','rating_apoyos_off','rating_desmarques','rating_temporiz'] as (keyof Player)[],
+    mental:    ['rating_liderazgo','rating_caracter','rating_competitiv','rating_companerismo','rating_mentalidad','rating_agresividad','rating_polivalencia','rating_inteligencia','rating_comunicacion','rating_personalidad'] as (keyof Player)[],
+  };
+
+  // Valoración Global = media de las 4 áreas auto + 4 campos manuales
+  const computeGlobalRating = (data: Partial<Player>): number | undefined => {
+    const autoVals = [
+      avgFields(data, AREA_FIELDS.physical),
+      avgFields(data, AREA_FIELDS.technical),
+      avgFields(data, AREA_FIELDS.tactical),
+      avgFields(data, AREA_FIELDS.mental),
+    ].filter((v): v is number => v !== undefined);
+    const manualVals = (['rating_competitive','rating_decision_making','rating_pace','rating_intelligence'] as (keyof Player)[])
+      .map(f => Number(data[f]) || 0).filter(v => v > 0);
+    const all = [...autoVals, ...manualVals];
+    if (all.length === 0) return undefined;
+    return Math.round((all.reduce((a, b) => a + b, 0) / all.length) * 10) / 10;
+  };
+
   const handleSave = async () => {
     if (!onUpdatePlayer) return;
     setSaving(true);
     try {
-      await onUpdatePlayer({ ...player, ...formData });
+      const computedGlobal = computeGlobalRating(formData);
+      await onUpdatePlayer({
+        ...player,
+        ...formData,
+        rating_physical:  avgFields(formData, AREA_FIELDS.physical)  ?? player.rating_physical,
+        rating_technical: avgFields(formData, AREA_FIELDS.technical) ?? player.rating_technical,
+        rating_tactical:  avgFields(formData, AREA_FIELDS.tactical)  ?? player.rating_tactical,
+        rating_mental:    avgFields(formData, AREA_FIELDS.mental)    ?? player.rating_mental,
+        global_rating:    computedGlobal ?? player.global_rating,
+      });
       setEditMode(false);
     } finally {
       setSaving(false);
@@ -463,13 +533,25 @@ export function PlayerDetail({
     const value = formData[field] as string;
     return (
       <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 space-y-3">
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">{label}</label>
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+          {editMode && (
+            <SpeechToTextButton
+              onTranscript={(text) =>
+                setFormData(prev => ({
+                  ...prev,
+                  [field]: prev[field] ? `${prev[field]} ${text}` : text,
+                }))
+              }
+            />
+          )}
+        </div>
         {editMode ? (
           <textarea
             value={value || ''}
             onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
             placeholder={placeholder || 'Completar análisis...'}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-emerald-500/50 min-h-[80px]"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-emerald-500/50 min-h-[90px] resize-y"
           />
         ) : (
           <p className="text-sm text-slate-300 leading-relaxed italic">
@@ -1164,7 +1246,10 @@ export function PlayerDetail({
                       <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3 relative group">
                         <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Edad Calculada</label>
                         <p className="text-sm font-black text-emerald-400">
-                          {formData.calculated_age != null ? `${formData.calculated_age} años` : '—'}
+                          {(() => {
+                            const age = computeAge(formData.birth_date as string | undefined, formData.birth_year as number | undefined);
+                            return age != null ? `${age} años` : '—';
+                          })()}
                         </p>
                       </div>
                       {renderDataField('Ciudad / Zona', 'area')}
@@ -1320,48 +1405,155 @@ export function PlayerDetail({
 
             {activeTab === 'perfil' && (
               <div className="space-y-8 animate-in fade-in duration-500">
-                {/* Visual Indicators Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {[
-                    { label: 'Valoración Global', value: player.global_rating, color: 'text-white' },
-                    { label: 'Potencial Estimado', value: player.rating_potential || player.potential_rating, color: 'text-emerald-500' },
-                    { label: 'Encaje en el Club', value: player.rating_club_fit, color: 'text-blue-500' },
-                  ].map((stat, i) => (
-                    <div key={i} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center text-center shadow-xl">
-                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">{stat.label}</p>
-                       <div className="flex items-end gap-1">
-                          <p className={cn("text-4xl font-black italic", stat.color)}>{formatRating(stat.value)}</p>
-                          <p className="text-xs font-black text-slate-700 mb-1">/ 5.0</p>
-                       </div>
-                       <div className="w-full bg-slate-800 h-1.5 rounded-full mt-4 overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${(Number(stat.value) || 0) * 20}%` }}
-                            className={cn("h-full rounded-full", stat.color.replace('text-', 'bg-'))} 
-                          />
-                       </div>
-                    </div>
-                  ))}
+
+                {/* Barra de acción edición perfil */}
+                <div className="flex items-center justify-between bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+                  <div>
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest">Perfil Futbolístico</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Análisis técnico-táctico, valoraciones y proyección</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {editMode ? (
+                      <>
+                        <button
+                          onClick={() => { setEditMode(false); setFormData({ ...player }); }}
+                          className="px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all"
+                        >CANCELAR</button>
+                        <button
+                          onClick={handleSave}
+                          disabled={saving}
+                          className="px-6 py-2 bg-emerald-600 text-slate-950 rounded-xl text-[10px] font-black hover:bg-emerald-500 transition-all shadow-lg disabled:opacity-50"
+                        >{saving ? 'GUARDANDO...' : 'GUARDAR'}</button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setEditMode(true)}
+                        className="px-5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-[10px] font-black text-slate-300 hover:text-white hover:border-emerald-500/40 transition-all flex items-center gap-2"
+                      >
+                        <Edit3 size={13} />
+                        EDITAR PERFIL
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Detailed Ratings Grid */}
-                <div>
-                   <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 px-2 flex items-center gap-2">
-                     <Settings size={14} className="text-emerald-500" /> Valoraciones Detalladas
-                   </h3>
-                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                      {renderRatingField('Técnica', 'rating_technical')}
-                      {renderRatingField('Táctica', 'rating_tactical')}
-                      {renderRatingField('Físico', 'rating_physical')}
-                      {renderRatingField('Mentalidad', 'rating_mental')}
-                      {renderRatingField('Competitividad', 'rating_competitive')}
+                {/* Visual Indicators Summary */}
+                {(() => {
+                  const globalCalc = computeGlobalRating(formData);
+                  const stats = [
+                    {
+                      label: 'Valoración Global',
+                      value: globalCalc,
+                      sub: globalCalc != null ? `Media de ${['rating_technical','rating_tactical','rating_physical','rating_mental','rating_competitive','rating_decision_making','rating_pace','rating_intelligence','rating_personality'].filter(f => Number((formData as any)[f]) > 0).length} ratings` : 'Sin ratings aún',
+                      color: 'text-white',
+                      bar: 'bg-white',
+                    },
+                    {
+                      label: 'Potencial Estimado',
+                      value: formData.rating_potential ?? formData.potential_rating,
+                      sub: 'Proyección a futuro',
+                      color: 'text-emerald-400',
+                      bar: 'bg-emerald-400',
+                    },
+                    {
+                      label: 'Encaje en el Club',
+                      value: formData.rating_club_fit,
+                      sub: 'Adecuación al proyecto',
+                      color: 'text-blue-400',
+                      bar: 'bg-blue-400',
+                    },
+                  ];
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {stats.map((stat, i) => (
+                        <div key={i} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center text-center shadow-xl">
+                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
+                          <p className="text-[9px] text-slate-600 font-bold mb-3">{stat.sub}</p>
+                          <div className="flex items-end gap-1">
+                            <p className={cn('text-4xl font-black italic', stat.color)}>
+                              {stat.value != null ? formatRating(stat.value) : '—'}
+                            </p>
+                            <p className="text-xs font-black text-slate-700 mb-1">/ 5.0</p>
+                          </div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded-full mt-4 overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${(Number(stat.value) || 0) * 20}%` }}
+                              className={cn('h-full rounded-full', stat.bar)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Valoraciones Detalladas */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest px-2 flex items-center gap-2">
+                    <Settings size={14} className="text-emerald-500" /> Valoraciones Detalladas
+                  </h3>
+
+                  {/* 4 áreas AUTO-calculadas desde Ficha Scouting */}
+                  <div>
+                    <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest px-1 mb-2">
+                      Calculadas automáticamente desde Ficha Scouting
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {([
+                        { label: 'Físico',      fields: AREA_FIELDS.physical,  color: 'text-emerald-400', border: 'border-emerald-900/40', count: AREA_FIELDS.physical.filter(f => Number(formData[f]) > 0).length },
+                        { label: 'Técnica',     fields: AREA_FIELDS.technical, color: 'text-blue-400',    border: 'border-blue-900/40',    count: AREA_FIELDS.technical.filter(f => Number(formData[f]) > 0).length },
+                        { label: 'Táctica',     fields: AREA_FIELDS.tactical,  color: 'text-cyan-400',    border: 'border-cyan-900/40',    count: AREA_FIELDS.tactical.filter(f => Number(formData[f]) > 0).length },
+                        { label: 'Cognitivas',  fields: AREA_FIELDS.mental,    color: 'text-amber-400',   border: 'border-amber-900/40',   count: AREA_FIELDS.mental.filter(f => Number(formData[f]) > 0).length },
+                      ] as const).map(area => {
+                        const val = avgFields(formData, area.fields as unknown as (keyof Player)[]);
+                        return (
+                          <div key={area.label} className={cn('bg-slate-900/30 border rounded-2xl p-4 flex flex-col gap-2', area.border)}>
+                            <div className="flex items-center justify-between">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{area.label}</label>
+                              <span className="text-[8px] font-black text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded uppercase tracking-wider">AUTO</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className={cn('text-2xl font-black italic', area.color)}>
+                                {val != null ? val.toFixed(1) : '—'}
+                              </p>
+                              <p className="text-[9px] text-slate-600 font-bold">/ 5.0</p>
+                            </div>
+                            <div className="flex gap-0.5">
+                              {[1,2,3,4,5].map(s => (
+                                <div key={s} className={cn('flex-1 h-1 rounded-full', (val ?? 0) >= s ? area.color.replace('text-','bg-') : 'bg-slate-800')} />
+                              ))}
+                            </div>
+                            <p className="text-[8px] text-slate-600">{area.count} / {(area.fields as readonly string[]).length} atributos</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 4 valoraciones manuales */}
+                  <div>
+                    <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest px-1 mb-2">
+                      Valoración manual del observador
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {renderRatingField('Competitividad',     'rating_competitive')}
                       {renderRatingField('Toma de Decisiones', 'rating_decision_making')}
-                      {renderRatingField('Ritmo de Juego', 'rating_pace')}
-                      {renderRatingField('Inteligencia Táctica', 'rating_intelligence')}
-                      {renderRatingField('Personalidad', 'rating_personality')}
-                      {renderRatingField('Potencial', 'rating_potential')}
-                      {renderRatingField('Encaje Club', 'rating_club_fit')}
-                   </div>
+                      {renderRatingField('Ritmo de Juego',     'rating_pace')}
+                      {renderRatingField('Inteligencia Táct.', 'rating_intelligence')}
+                    </div>
+                  </div>
+
+                  {/* Potencial y Encaje */}
+                  <div>
+                    <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest px-1 mb-2">
+                      Proyección y encaje
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 md:w-1/2">
+                      {renderRatingField('Potencial Estimado', 'rating_potential')}
+                      {renderRatingField('Encaje en el Club',  'rating_club_fit')}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Analysis Text Blocks */}

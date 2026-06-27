@@ -20,6 +20,8 @@ interface ReportListProps {
   onDeleteReport: (reportId: string) => void;
   onMergeReports: (reportIds: string[]) => void;
   onSelectPlayer: (player: Player) => void;
+  userRole?: string;
+  userId?: string;
 }
 
 export function ReportList({ 

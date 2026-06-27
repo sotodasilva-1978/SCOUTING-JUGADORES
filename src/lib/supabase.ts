@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Profile } from '../types';
 import imageCompression from 'browser-image-compression';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -93,4 +94,38 @@ export const uploadPlayerPhoto = async (
   const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
   onProgress?.('done');
   return publicUrl;
+};
+
+// ─── Auth Helpers ────────────────────────────────────────────────────────────
+
+export const signIn = (email: string, password: string) =>
+  supabase.auth.signInWithPassword({ email, password });
+
+export const signOut = () => supabase.auth.signOut();
+
+export const getOrCreateProfile = async (
+  userId: string,
+  email: string
+): Promise<Profile | null> => {
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (existing) return existing as Profile;
+
+  const { data: created } = await supabase
+    .from('profiles')
+    .insert([{
+      user_id: userId,
+      full_name: email.split('@')[0],
+      email,
+      role: 'SCOUT',
+      active: true,
+    }])
+    .select()
+    .single();
+
+  return created as Profile | null;
 };

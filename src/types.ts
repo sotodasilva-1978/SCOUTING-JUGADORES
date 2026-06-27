@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'SUPERADMIN' | 'ADMIN_CLUB' | 'SCOUT' | 'GUEST';
+export type UserRole = 'ADMIN' | 'COORD' | 'COORD_F11' | 'COORD_F8' | 'PRESID' | 'ENTREN' | 'SCOUT' | 'SCOUT_F11' | 'SCOUT_F8';
 
 export interface Profile {
   id: string;

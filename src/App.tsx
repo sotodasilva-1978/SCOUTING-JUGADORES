@@ -14,11 +14,11 @@ import { ReportList } from './components/ReportList';
 import { ReportForm } from './components/ReportForm';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Comparativas } from './components/Comparativas';
-import { Plus } from 'lucide-react';
-import { MOCK_PLAYERS, MOCK_REPORTS, MOCK_MATCHES, MOCK_VIDEOS } from './mockData';
-import { Player, Match, Report, Video, HistoryLog } from './types';
-import { supabase } from './lib/supabase';
-import { computeAge } from './lib/utils';
+import { LoginPage } from './components/LoginPage';
+import { Plus, Loader2 } from 'lucide-react';
+import { Player, Match, Report, Video, HistoryLog, Profile, UserRole } from './types';
+import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
+import { computeAge, calculateCategory, isF11Category, isF8Category, canCreateReport, canPrintReport } from './lib/utils';
 import { useEffect } from 'react';
 
 const isValidUUID = (str: string) => {
@@ -76,25 +76,102 @@ export default function App() {
   const [reports, setReports] = useState<Report[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [history, setHistory] = useState<HistoryLog[]>([]);
-  
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [selectedPlayerTab, setSelectedPlayerTab] = useState('resumen');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
+  const [playerClubFilter, setPlayerClubFilter] = useState<string | undefined>(undefined);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [isNewMatchOpen, setIsNewMatchOpen] = useState(false);
   const [isLinkPlayerOpen, setIsLinkPlayerOpen] = useState(false);
   const [reportToCreate, setReportToCreate] = useState<{playerId?: string, matchId?: string, mode?: 'RAPID' | 'COMPLETE'} | null>(null);
-  
-  const [userRole] = useState('SUPERADMIN');
+
+  // Auth state
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  const userRole = (userProfile?.role ?? 'SCOUT') as UserRole;
+  const userId = userProfile?.user_id ?? '';
+
   useEffect(() => {
-    bootstrapAndFetch();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        const profile = await getOrCreateProfile(session.user.id, session.user.email!);
+        setUserProfile(profile);
+        bootstrapAndFetch();
+      } else {
+        setAuthLoading(false);
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        const profile = await getOrCreateProfile(session.user.id, session.user.email!);
+        setUserProfile(profile);
+        setAuthLoading(false);
+        if (event === 'SIGNED_IN') bootstrapAndFetch();
+      } else {
+        setUserProfile(null);
+        setAuthLoading(false);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    await signOut();
+    setPlayers([]);
+    setMatches([]);
+    setReports([]);
+    setVideos([]);
+    setHistory([]);
+    setActiveTab('dashboard');
+  };
+
+  // Jugadores filtrados según rol
+  const scopedPlayers = useMemo(() => {
+    if (userRole === 'ENTREN' && userProfile?.category_id) {
+      return players.filter(p => calculateCategory(p.birth_year ?? 0) === userProfile.category_id);
+    }
+    if (userRole === 'SCOUT_F11' || userRole === 'COORD_F11') {
+      return players.filter(p => isF11Category(calculateCategory(p.birth_year ?? 0)));
+    }
+    if (userRole === 'SCOUT_F8' || userRole === 'COORD_F8') {
+      return players.filter(p => isF8Category(calculateCategory(p.birth_year ?? 0)));
+    }
+    return players;
+  }, [players, userRole, userProfile?.category_id]);
+
+  // Informes filtrados según rol
+  const scopedReports = useMemo(() => {
+    if (userRole === 'ENTREN' && userProfile?.category_id) {
+      return reports.filter(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        return p && calculateCategory(p.birth_year ?? 0) === userProfile.category_id;
+      });
+    }
+    if (userRole === 'SCOUT_F11' || userRole === 'COORD_F11') {
+      return reports.filter(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        return p && isF11Category(calculateCategory(p.birth_year ?? 0));
+      });
+    }
+    if (userRole === 'SCOUT_F8' || userRole === 'COORD_F8') {
+      return reports.filter(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        return p && isF8Category(calculateCategory(p.birth_year ?? 0));
+      });
+    }
+    return reports;
+  }, [reports, players, userRole, userProfile?.category_id]);
 
   const bootstrapAndFetch = async () => {
     setLoading(true);
@@ -150,7 +227,11 @@ export default function App() {
       console.log('Fetched players count:', playersData?.length || 0);
       
       if (playersData) {
-        setPlayers(playersData as Player[]);
+        // Recalcular siempre la edad en cliente para no depender del valor guardado en BD
+        setPlayers((playersData as Player[]).map(p => ({
+          ...p,
+          calculated_age: computeAge(p.birth_date, p.birth_year),
+        })));
       }
 
       // 4. Fetch other data
@@ -227,6 +308,9 @@ export default function App() {
         cleaned[field] = (player as any)[field];
       }
     });
+
+    // Siempre recalcular la edad a partir de los datos actuales, nunca confiar en el valor guardado
+    cleaned.calculated_age = computeAge(player.birth_date, player.birth_year) ?? null;
 
     if (!isValidUUID(cleaned.id)) delete cleaned.id;
     
@@ -881,13 +965,15 @@ export default function App() {
 
   const renderContent = () => {
     if (activeTab === 'player_detail' && selectedPlayer && playerDetailProps) {
-      return <PlayerDetail 
-        player={playerDetailProps.player} 
+      return <PlayerDetail
+        player={playerDetailProps.player}
         reports={playerDetailProps.reports}
         matches={playerDetailProps.matches}
         videos={playerDetailProps.videos}
         history={playerDetailProps.history}
         initialTab={selectedPlayerTab}
+        userRole={userRole}
+        userId={userId}
         onBack={() => {
           setSelectedPlayer(null);
           setActiveTab('players');
@@ -929,13 +1015,15 @@ export default function App() {
     }
 
     if (activeTab === 'report_form') {
-      return <ReportForm 
+      return <ReportForm
         initialPlayerId={reportToCreate?.playerId}
         initialMatchId={reportToCreate?.matchId}
         initialMode={reportToCreate?.mode}
         initialReport={editingReport}
-        players={players}
+        players={scopedPlayers}
         matches={matches}
+        userRole={userRole}
+        userId={userId}
         onSave={handleSaveReport}
         onCancel={() => {
           setReportToCreate(null);
@@ -947,20 +1035,25 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard 
-          onSelectPlayer={handleSelectPlayer} 
+        return <Dashboard
+          onSelectPlayer={handleSelectPlayer}
           onSelectMatch={handleSelectMatch}
           onTabChange={setActiveTab}
-          players={players} 
+          players={scopedPlayers}
           matches={matches}
-          reports={reports}
+          reports={scopedReports}
           videos={videos}
         />;
       case 'players':
-        return <PlayerList 
-          players={players} 
-          onSelectPlayer={handleSelectPlayer} 
-          onNewPlayer={() => setIsQuickAddOpen(true)} 
+        return <PlayerList
+          key={playerClubFilter ?? 'all'}
+          players={scopedPlayers}
+          onSelectPlayer={handleSelectPlayer}
+          onNewPlayer={() => setIsQuickAddOpen(true)}
+          onDeletePlayer={handleDeletePlayer}
+          initialClubFilter={playerClubFilter}
+          userRole={userRole}
+          userId={userId}
         />;
       case 'teams':
         return (
@@ -969,46 +1062,73 @@ export default function App() {
               setSelectedClub(name);
               setActiveTab('club_detail');
             }}
+            onViewPlayers={(clubName) => {
+              setPlayerClubFilter(clubName);
+              setActiveTab('players');
+            }}
           />
         );
       case 'matches':
-        return <MatchList 
-          matches={matches} 
+        return <MatchList
+          matches={matches}
           onSelectMatch={handleSelectMatch}
           onNewMatch={() => setIsNewMatchOpen(true)}
         />;
       case 'reports':
-        return <ReportList 
-          reports={reports} 
-          players={players} 
+        return <ReportList
+          reports={scopedReports}
+          players={scopedPlayers}
           matches={matches}
-          onNewReport={() => handleCreateReport()}
+          onNewReport={(mode) => handleCreateReport(undefined, undefined, mode)}
           onEditReport={handleEditReport}
           onDeleteReport={handleDeleteReport}
           onMergeReports={handleMergeReports}
           onSelectPlayer={handleSelectPlayer}
+          userRole={userRole}
+          userId={userId}
         />;
       case 'comparativas':
-        return <Comparativas players={players} />;
+        return <Comparativas players={scopedPlayers} />;
       case 'settings':
       case 'users':
-        return <SettingsPanel />;
+        return <SettingsPanel userRole={userRole} />;
       default:
-        return <Dashboard 
-          onSelectPlayer={handleSelectPlayer} 
+        return <Dashboard
+          onSelectPlayer={handleSelectPlayer}
           onSelectMatch={handleSelectMatch}
           onTabChange={setActiveTab}
-          players={players} 
-          matches={matches} 
-          reports={reports} 
-          videos={videos} 
+          players={scopedPlayers}
+          matches={matches}
+          reports={scopedReports}
+          videos={videos}
         />;
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!userProfile) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 flex text-slate-200 selection:bg-emerald-500/30">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} role={userRole} />
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          if (tab === 'players') setPlayerClubFilter(undefined);
+          setActiveTab(tab);
+        }}
+        role={userRole}
+        userProfile={userProfile}
+        onLogout={handleLogout}
+      />
       
       <main className="flex-1 min-w-0 flex flex-col lg:h-screen bg-dot-pattern">
         <header className="border-b border-slate-800/80 flex flex-col bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">

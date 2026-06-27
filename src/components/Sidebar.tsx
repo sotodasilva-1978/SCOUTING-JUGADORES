@@ -1,7 +1,8 @@
 import React from 'react';
 import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, X, ChevronRight, Trophy, Crosshair, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
+import { cn, getRoleLabel } from '../lib/utils';
+import type { Profile } from '../types';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -40,6 +41,8 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   role: string;
+  userProfile: Profile | null;
+  onLogout: () => void;
 }
 
 // Ítems principales mostrados en la barra inferior móvil (máx. 4 + "Más")
@@ -56,21 +59,24 @@ function BrandMark({ size = 44 }: { size?: number }) {
   );
 }
 
-export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, role }: SidebarProps) {
+export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, role, userProfile, onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
+  const ALL_ROLES = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
+  const SCOUTS_AND_UP = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
+
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT', 'GUEST'] },
-    { id: 'players', label: 'Jugadores', icon: Users, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT', 'GUEST'] },
-    { id: 'comparativas', label: 'Comparar', icon: Crosshair, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT'] },
-    { id: 'matches', label: 'Agenda', icon: Trophy, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT'] },
-    { id: 'reports', label: 'Archivo', icon: ClipboardList, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT'] },
-    { id: 'teams', label: 'Clubes', icon: Shield, roles: ['SUPERADMIN', 'ADMIN_CLUB'] },
+    { id: 'dashboard',    label: 'Dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
+    { id: 'players',      label: 'Jugadores', icon: Users,           roles: ALL_ROLES },
+    { id: 'comparativas', label: 'Comparar',  icon: Crosshair,       roles: SCOUTS_AND_UP },
+    { id: 'matches',      label: 'Agenda',    icon: Trophy,          roles: ALL_ROLES },
+    { id: 'reports',      label: 'Archivo',   icon: ClipboardList,   roles: ALL_ROLES },
+    { id: 'teams',        label: 'Clubes',    icon: Shield,          roles: ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8'] },
   ];
 
   const adminItems = [
-    { id: 'settings', label: 'Configuración', icon: Settings, roles: ['SUPERADMIN', 'ADMIN_CLUB'] },
+    { id: 'settings', label: 'Configuración', icon: Settings, roles: ['ADMIN'] },
   ];
 
   const filteredNav = navItems.filter(item => item.roles.includes(role));
@@ -121,11 +127,19 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
         </nav>
 
         <div className="p-4 border-t border-slate-800/80">
+          {!isCollapsed && userProfile && (
+            <div className="mb-3 px-2 py-2 rounded-xl bg-slate-900/60 border border-slate-800">
+              <p className="text-xs font-bold text-slate-200 truncate">{userProfile.full_name}</p>
+              <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">{getRoleLabel(userProfile.role)}</span>
+            </div>
+          )}
           <button onClick={() => setIsCollapsed(!isCollapsed)}
             className="w-full flex items-center justify-center p-2 text-slate-500 hover:text-slate-200 transition-colors">
             <ChevronRight className={cn("w-5 h-5 transition-transform duration-300", isCollapsed ? "rotate-0" : "rotate-180")} />
           </button>
-          <button className={cn("w-full flex items-center mt-3 p-2 text-rose-500/80 hover:bg-rose-500/10 rounded-lg transition-all", isCollapsed && "justify-center")}>
+          <button
+            onClick={onLogout}
+            className={cn("w-full flex items-center mt-3 p-2 text-rose-500/80 hover:bg-rose-500/10 rounded-lg transition-all", isCollapsed && "justify-center")}>
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {!isCollapsed && <span className="ml-3 text-xs font-black uppercase tracking-widest">Salir</span>}
           </button>
@@ -190,7 +204,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
                   );
                 })}
               </div>
-              <button className="w-full flex items-center justify-center gap-2 mt-4 p-3 text-rose-500 bg-rose-500/5 border border-rose-500/20 rounded-2xl transition-all active:scale-95">
+              <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 mt-4 p-3 text-rose-500 bg-rose-500/5 border border-rose-500/20 rounded-2xl transition-all active:scale-95">
                 <LogOut className="w-4 h-4" />
                 <span className="text-xs font-black uppercase tracking-widest">Cerrar sesión</span>
               </button>
