@@ -1027,65 +1027,82 @@ export function PlayerDetail({
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                        {(['fisicas','tecnicas','tacticas','cognitivas'] as const).map(catId => {
                          const areaMap = {
-                           fisicas:    { label:'FÍSICAS',    color:'#10b981', fill:'rgba(16,185,129,0.28)'  },
-                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', fill:'rgba(96,165,250,0.28)'  },
-                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', fill:'rgba(167,139,250,0.28)' },
-                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', fill:'rgba(251,191,36,0.25)'  },
+                           fisicas:    { label:'FÍSICAS',    color:'#10b981', stroke:'#10b981', fill:'rgba(16,185,129,0.22)',  badge:'#052e16' },
+                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', stroke:'#60a5fa', fill:'rgba(96,165,250,0.22)',  badge:'#1e3a5f' },
+                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', stroke:'#a78bfa', fill:'rgba(167,139,250,0.22)', badge:'#2e1065' },
+                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', stroke:'#fbbf24', fill:'rgba(251,191,36,0.20)',  badge:'#422006' },
                          } as const;
                          const area = areaMap[catId];
                          const attrs = RATING_CATEGORIES[catId];
-                         const W=460, H=500, cx=W/2, cy=H/2+10, R=140, RINGS=5;
+                         const W=560, H=600, cx=W/2, cy=H/2+10, R=155, RINGS=5;
+                         const LABEL_R = R + 74, BADGE_R = R + 20;
                          const n=attrs.length, step=(2*Math.PI)/n, start=-Math.PI/2;
                          const pt=(a:number,r:number)=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
-                         const vals=attrs.map(a=>{
-                           const raw=Number(formData[a.field as keyof Player])||0;
-                           return {label:a.label,norm:raw/5,pct:Math.round((raw/5)*100)};
+                         const vals=attrs.map(attr=>{
+                           const raw=Number(formData[attr.field as keyof Player])||0;
+                           return {label:attr.label, raw, norm:raw/5};
                          });
                          const polygon=vals.map((d,i)=>{
                            const a=start+i*step;
                            return `${cx+d.norm*R*Math.cos(a)},${cy+d.norm*R*Math.sin(a)}`;
                          }).join(' ');
-                         const anchor=(a:number)=>Math.cos(a)>0.25?'start':Math.cos(a)<-0.25?'end':'middle';
-                         const labelRot=(a:number)=>{
-                           let d=(a*180/Math.PI)+90;
-                           while(d>180)d-=360; while(d<-180)d+=360;
-                           if(d>90)d-=180; if(d<-90)d+=180; return d;
-                         };
+                         const textAnch=(a:number)=>Math.cos(a)>0.2?'start':Math.cos(a)<-0.2?'end':'middle';
+                         const firstDy=(a:number)=>Math.sin(a)<-0.35?'-1.1em':Math.sin(a)>0.35?'0.1em':'-0.55em';
                          return (
-                           <div key={catId} className="rounded-2xl overflow-hidden border border-slate-800/30 shadow-2xl" style={{background:'#0d1117'}}>
-                             <div className="text-center pt-5 pb-0 px-4">
-                               <p className="text-[9px] font-black uppercase tracking-[0.3em] italic mb-0.5" style={{color:area.color}}>Radar de Atributos</p>
-                               <h5 className="text-lg font-black text-white uppercase italic tracking-tighter leading-none">{area.label}</h5>
+                           <div key={catId} className="rounded-2xl overflow-hidden border border-slate-700/30 shadow-2xl" style={{background:'#080c14'}}>
+                             <div className="text-center pt-5 pb-1 px-4">
+                               <p className="text-[9px] font-black uppercase tracking-[0.35em] italic" style={{color:area.color}}>Radar · {area.label}</p>
                              </div>
                              <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
+                               {/* Anillos */}
                                {Array.from({length:RINGS}).map((_,ri)=>(
-                                 <circle key={ri} cx={cx} cy={cy} r={R*((RINGS-ri)/RINGS)} fill={ri%2===0?'#111827':'#0d1117'} />
+                                 <circle key={ri} cx={cx} cy={cy} r={R*((ri+1)/RINGS)}
+                                   fill="none"
+                                   stroke={ri===RINGS-1?'#1e2d3d':'#111827'}
+                                   strokeWidth={ri===RINGS-1?1.5:0.75}
+                                   strokeDasharray={ri<RINGS-1?'2 4':''}
+                                 />
                                ))}
-                               <circle cx={cx} cy={cy} r={R} fill="none" stroke="#1f2937" strokeWidth={1}/>
-                               {Array.from({length:RINGS-1}).map((_,ri)=>(
-                                 <circle key={ri} cx={cx} cy={cy} r={R*((ri+1)/RINGS)} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
+                               {/* Escala */}
+                               {[1,2,3,4,5].map(v=>(
+                                 <text key={v} x={cx+5} y={cy-R*(v/5)+4}
+                                   fill="#2d3f50" fontSize={8} fontWeight="800" fontFamily="system-ui,sans-serif">{v}</text>
                                ))}
-                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#374151" strokeWidth={1}/>;}) }
-                               <polygon points={polygon} fill={area.fill} stroke={area.color} strokeWidth={2.5} strokeLinejoin="round"/>
+                               {/* Ejes */}
+                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#1f2937" strokeWidth={1}/>;}) }
+                               {/* Polígono */}
+                               <polygon points={polygon} fill={area.fill} stroke="none"/>
+                               <polygon points={polygon} fill="none" stroke={area.stroke} strokeWidth={2.5} strokeLinejoin="round" opacity={0.95}/>
+                               {/* Badges y etiquetas */}
                                {vals.map((d,i)=>{
-                                 const a=start+i*step,bp=pt(a,R+17),lp=pt(a,R+44),rot=labelRot(a),anch=anchor(a),ws=d.label.split(' ');
+                                 const a=start+i*step;
+                                 const bp=pt(a,BADGE_R), lp=pt(a,LABEL_R);
+                                 const anch=textAnch(a);
+                                 const words=d.label.split(' ');
                                  return(
                                    <g key={i}>
-                                     <rect x={bp.x-14} y={bp.y-11} width={28} height={22} rx={4} fill="#1e3a5f"/>
-                                     <text x={bp.x} y={bp.y+5} textAnchor="middle" fill="white" fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">{d.pct}</text>
-                                     {ws.length===1?(
-                                       <text x={lp.x} y={lp.y} textAnchor={anch} dominantBaseline="middle" fill="#cbd5e1" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif" transform={`rotate(${rot},${lp.x},${lp.y})`}>{d.label}</text>
-                                     ):(
-                                       <text x={lp.x} y={lp.y} textAnchor={anch} fill="#cbd5e1" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif" transform={`rotate(${rot},${lp.x},${lp.y})`}>
-                                         <tspan x={lp.x} dy="-0.55em">{ws[0]}</tspan>
-                                         <tspan x={lp.x} dy="1.2em">{ws.slice(1).join(' ')}</tspan>
-                                       </text>
-                                     )}
+                                     <circle cx={cx+d.norm*R*Math.cos(a)} cy={cy+d.norm*R*Math.sin(a)}
+                                       r={4} fill={area.stroke} opacity={d.raw>0?1:0}/>
+                                     <rect x={bp.x-15} y={bp.y-12} width={30} height={22} rx={5}
+                                       fill={area.badge} stroke={area.stroke} strokeWidth={0.75}/>
+                                     <text x={bp.x} y={bp.y+5} textAnchor="middle"
+                                       fill="white" fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">
+                                       {d.raw||'–'}
+                                     </text>
+                                     <text x={lp.x} y={lp.y} textAnchor={anch}
+                                       fill="#94a3b8" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif">
+                                       {words.length===1
+                                         ?<tspan dominantBaseline="middle">{d.label}</tspan>
+                                         :words.map((w,wi)=>(
+                                           <tspan key={wi} x={lp.x} dy={wi===0?firstDy(a):'1.2em'}>{w}</tspan>
+                                         ))
+                                       }
+                                     </text>
                                    </g>
                                  );
                                })}
                              </svg>
-                             <p className="text-center text-[8px] font-black text-slate-700 uppercase tracking-[0.2em] pb-4">Scouting Club · Escala 1-5</p>
+                             <p className="text-center text-[8px] font-black text-slate-800 uppercase tracking-[0.2em] pb-3">AS Pro Scout · Escala 1–5</p>
                            </div>
                          );
                        })}

@@ -86,19 +86,22 @@ const COLOR_B = { stroke: '#fb7185', fill: 'rgba(251,113,133,0.25)', badge: '#4c
 
 function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player | null; key?: string }) {
   const area = AREAS[areaKey];
-  const W = 480, H = 520;
+  const W = 600, H = 640;
   const cx = W / 2, cy = H / 2 + 10;
-  const R = 140, RINGS = 5;
+  const R = 168, RINGS = 5;
   const n = area.attrs.length;
-  const step  = (2 * Math.PI) / n;
+  const step = (2 * Math.PI) / n;
   const start = -Math.PI / 2;
+  const LABEL_R = R + 78;
+  const BADGE_A_R = R + 20;
+  const BADGE_B_R = R + 44;
 
   const pt = (a: number, r: number) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
 
   const getVals = (p: Player) =>
     area.attrs.map(attr => {
       const raw = Number((p as unknown as Record<string, unknown>)[attr.field]) || 0;
-      return { label: attr.label, norm: raw / 5, pct: Math.round((raw / 5) * 100) };
+      return { label: attr.label, raw, norm: raw / 5 };
     });
 
   const valsA = getVals(playerA);
@@ -110,102 +113,119 @@ function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA
       return `${cx + d.norm * R * Math.cos(a)},${cy + d.norm * R * Math.sin(a)}`;
     }).join(' ');
 
-  const anchor = (a: number) =>
-    Math.cos(a) > 0.25 ? 'start' : Math.cos(a) < -0.25 ? 'end' : 'middle';
+  const textAnchor = (a: number) =>
+    Math.cos(a) > 0.2 ? 'start' : Math.cos(a) < -0.2 ? 'end' : 'middle';
 
-  const labelRot = (a: number) => {
-    let d = (a * 180) / Math.PI + 90;
-    while (d > 180) d -= 360;
-    while (d < -180) d += 360;
-    if (d > 90) d -= 180;
-    if (d < -90) d += 180;
-    return d;
-  };
+  // dy offset for first tspan based on vertical position
+  const firstDy = (a: number) =>
+    Math.sin(a) < -0.35 ? '-1.1em' : Math.sin(a) > 0.35 ? '0.1em' : '-0.55em';
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-slate-800/30 shadow-2xl" style={{ background: '#0d1117' }}>
-      <div className="text-center pt-5 pb-0 px-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.3em] italic mb-0.5" style={{ color: area.color }}>
-          Radar de Atributos
+    <div className="rounded-2xl overflow-hidden border border-slate-700/30 shadow-2xl" style={{ background: '#080c14' }}>
+      <div className="text-center pt-5 pb-1 px-4">
+        <p className="text-[9px] font-black uppercase tracking-[0.35em] italic" style={{ color: area.color }}>
+          Radar · {area.label}
         </p>
-        <h5 className="text-lg font-black text-white uppercase italic tracking-tighter leading-none">
-          {area.label}
-        </h5>
       </div>
 
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
+        {/* Fondo anillos alternos */}
         {Array.from({ length: RINGS }).map((_, ri) => (
-          <circle key={ri} cx={cx} cy={cy} r={R * ((RINGS - ri) / RINGS)}
-            fill={ri % 2 === 0 ? '#111827' : '#0d1117'} />
-        ))}
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke="#1f2937" strokeWidth={1} />
-        {Array.from({ length: RINGS - 1 }).map((_, ri) => (
           <circle key={ri} cx={cx} cy={cy} r={R * ((ri + 1) / RINGS)}
-            fill="none" stroke="#1f2937" strokeWidth={0.5} />
+            fill="none"
+            stroke={ri === RINGS - 1 ? '#1e2d3d' : '#111827'}
+            strokeWidth={ri === RINGS - 1 ? 1.5 : 0.75}
+            strokeDasharray={ri < RINGS - 1 ? '2 4' : ''}
+          />
         ))}
-        {valsA.map((_, i) => {
-          const a = start + i * step, o = pt(a, R);
-          return <line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#374151" strokeWidth={1} />;
+        {/* Etiquetas de escala */}
+        {[1,2,3,4,5].map(v => (
+          <text key={v} x={cx + 5} y={cy - R * (v / 5) + 4}
+            fill="#2d3f50" fontSize={8} fontWeight="800" fontFamily="system-ui,sans-serif">
+            {v}
+          </text>
+        ))}
+        {/* Ejes radiales */}
+        {Array.from({ length: n }).map((_, i) => {
+          const a = start + i * step;
+          const o = pt(a, R);
+          return <line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#1f2937" strokeWidth={1} />;
         })}
 
+        {/* Polígono jugador B (fondo, discontinuo) */}
         {valsB && (
-          <polygon points={polygon(valsB)}
-            fill={COLOR_B.fill} stroke={COLOR_B.stroke}
-            strokeWidth={2.5} strokeLinejoin="round" strokeDasharray="6 3"
-          />
+          <>
+            <polygon points={polygon(valsB)}
+              fill={COLOR_B.fill} stroke="none" />
+            <polygon points={polygon(valsB)}
+              fill="none" stroke={COLOR_B.stroke}
+              strokeWidth={2} strokeLinejoin="round" strokeDasharray="5 3" opacity={0.9} />
+          </>
         )}
-        <polygon points={polygon(valsA)}
-          fill={COLOR_A.fill} stroke={COLOR_A.stroke}
-          strokeWidth={2.5} strokeLinejoin="round"
-        />
+        {/* Polígono jugador A */}
+        <>
+          <polygon points={polygon(valsA)}
+            fill={COLOR_A.fill} stroke="none" />
+          <polygon points={polygon(valsA)}
+            fill="none" stroke={COLOR_A.stroke}
+            strokeWidth={2.5} strokeLinejoin="round" opacity={0.95} />
+        </>
 
+        {/* Badges y etiquetas por eje */}
         {valsA.map((dA, i) => {
-          const a    = start + i * step;
-          const dB   = valsB?.[i];
-          const rot  = labelRot(a);
-          const anch = anchor(a);
-          const bpA  = pt(a, R + 16);
-          const bpB  = pt(a, R + 34);
-          const lp   = pt(a, valsB ? R + 56 : R + 44);
-          const ws   = dA.label.split(' ');
+          const a = start + i * step;
+          const dB = valsB?.[i];
+          const anch = textAnchor(a);
+          const bpA = pt(a, BADGE_A_R);
+          const bpB = pt(a, BADGE_B_R);
+          const lp  = pt(a, LABEL_R);
+          const words = dA.label.split(' ');
 
           return (
             <g key={i}>
-              <rect x={bpA.x - 13} y={bpA.y - 10} width={26} height={20} rx={3} fill={COLOR_A.badge} />
-              <text x={bpA.x} y={bpA.y + 4} textAnchor="middle"
-                fill={COLOR_A.text} fontSize={10} fontWeight="900" fontFamily="system-ui,sans-serif">
-                {dA.pct}
+              {/* Punto vértice A */}
+              <circle cx={cx + dA.norm * R * Math.cos(a)} cy={cy + dA.norm * R * Math.sin(a)}
+                r={4} fill={COLOR_A.stroke} opacity={dA.raw > 0 ? 1 : 0} />
+
+              {/* Badge valor A */}
+              <rect x={bpA.x - 15} y={bpA.y - 12} width={30} height={22} rx={5}
+                fill={COLOR_A.badge} stroke={COLOR_A.stroke} strokeWidth={0.75} />
+              <text x={bpA.x} y={bpA.y + 5} textAnchor="middle"
+                fill={COLOR_A.text} fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">
+                {dA.raw || '–'}
               </text>
+
+              {/* Badge valor B */}
               {dB && (
                 <>
-                  <rect x={bpB.x - 13} y={bpB.y - 10} width={26} height={20} rx={3} fill={COLOR_B.badge} />
-                  <text x={bpB.x} y={bpB.y + 4} textAnchor="middle"
-                    fill={COLOR_B.text} fontSize={10} fontWeight="900" fontFamily="system-ui,sans-serif">
-                    {dB.pct}
+                  <circle cx={cx + dB.norm * R * Math.cos(a)} cy={cy + dB.norm * R * Math.sin(a)}
+                    r={4} fill={COLOR_B.stroke} opacity={dB.raw > 0 ? 1 : 0} />
+                  <rect x={bpB.x - 15} y={bpB.y - 12} width={30} height={22} rx={5}
+                    fill={COLOR_B.badge} stroke={COLOR_B.stroke} strokeWidth={0.75} />
+                  <text x={bpB.x} y={bpB.y + 5} textAnchor="middle"
+                    fill={COLOR_B.text} fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">
+                    {dB.raw || '–'}
                   </text>
                 </>
               )}
-              {ws.length === 1 ? (
-                <text x={lp.x} y={lp.y} textAnchor={anch} dominantBaseline="middle"
-                  fill="#94a3b8" fontSize={9} fontWeight="700" fontFamily="system-ui,sans-serif"
-                  transform={`rotate(${rot},${lp.x},${lp.y})`}>
-                  {dA.label}
-                </text>
-              ) : (
-                <text x={lp.x} y={lp.y} textAnchor={anch}
-                  fill="#94a3b8" fontSize={9} fontWeight="700" fontFamily="system-ui,sans-serif"
-                  transform={`rotate(${rot},${lp.x},${lp.y})`}>
-                  <tspan x={lp.x} dy="-0.55em">{ws[0]}</tspan>
-                  <tspan x={lp.x} dy="1.2em">{ws.slice(1).join(' ')}</tspan>
-                </text>
-              )}
+
+              {/* Etiqueta horizontal (sin rotación) */}
+              <text x={lp.x} y={lp.y} textAnchor={anch}
+                fill="#94a3b8" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif">
+                {words.length === 1
+                  ? <tspan dominantBaseline="middle">{dA.label}</tspan>
+                  : words.map((w, wi) => (
+                      <tspan key={wi} x={lp.x} dy={wi === 0 ? firstDy(a) : '1.2em'}>{w}</tspan>
+                    ))
+                }
+              </text>
             </g>
           );
         })}
       </svg>
 
-      <p className="text-center text-[8px] font-black text-slate-700 uppercase tracking-[0.2em] pb-4">
-        Scouting Club · Escala 1-5
+      <p className="text-center text-[8px] font-black text-slate-800 uppercase tracking-[0.2em] pb-3">
+        AS Pro Scout · Escala 1–5
       </p>
     </div>
   );
