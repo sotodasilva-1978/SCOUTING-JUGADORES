@@ -1027,15 +1027,14 @@ export function PlayerDetail({
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                        {(['fisicas','tecnicas','tacticas','cognitivas'] as const).map(catId => {
                          const areaMap = {
-                           fisicas:    { label:'FÍSICAS',    color:'#10b981', stroke:'#10b981', fill:'rgba(16,185,129,0.22)',  badge:'#052e16' },
-                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', stroke:'#60a5fa', fill:'rgba(96,165,250,0.22)',  badge:'#1e3a5f' },
-                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', stroke:'#a78bfa', fill:'rgba(167,139,250,0.22)', badge:'#2e1065' },
-                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', stroke:'#fbbf24', fill:'rgba(251,191,36,0.20)',  badge:'#422006' },
+                           fisicas:    { label:'FÍSICAS',    color:'#10b981', fill:'rgba(16,185,129,0.20)'  },
+                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', fill:'rgba(96,165,250,0.20)'  },
+                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', fill:'rgba(167,139,250,0.20)' },
+                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', fill:'rgba(251,191,36,0.18)'  },
                          } as const;
                          const area = areaMap[catId];
                          const attrs = RATING_CATEGORIES[catId];
-                         const W=560, H=600, cx=W/2, cy=H/2+10, R=155, RINGS=5;
-                         const LABEL_R = R + 74, BADGE_R = R + 20;
+                         const W=300, H=300, cx=150, cy=150, R=110, RINGS=5;
                          const n=attrs.length, step=(2*Math.PI)/n, start=-Math.PI/2;
                          const pt=(a:number,r:number)=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
                          const vals=attrs.map(attr=>{
@@ -1046,63 +1045,46 @@ export function PlayerDetail({
                            const a=start+i*step;
                            return `${cx+d.norm*R*Math.cos(a)},${cy+d.norm*R*Math.sin(a)}`;
                          }).join(' ');
-                         const textAnch=(a:number)=>Math.cos(a)>0.2?'start':Math.cos(a)<-0.2?'end':'middle';
-                         const firstDy=(a:number)=>Math.sin(a)<-0.35?'-1.1em':Math.sin(a)>0.35?'0.1em':'-0.55em';
                          return (
-                           <div key={catId} className="rounded-2xl overflow-hidden border border-slate-700/30 shadow-2xl" style={{background:'#080c14'}}>
-                             <div className="text-center pt-5 pb-1 px-4">
-                               <p className="text-[9px] font-black uppercase tracking-[0.35em] italic" style={{color:area.color}}>Radar · {area.label}</p>
+                           <div key={catId} className="rounded-2xl border border-slate-700/30 overflow-hidden shadow-xl" style={{background:'#080c14'}}>
+                             {/* Cabecera */}
+                             <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+                               <div className="w-2 h-2 rounded-full" style={{background:area.color}}/>
+                               <p className="text-[10px] font-black uppercase tracking-[0.3em]" style={{color:area.color}}>{area.label}</p>
                              </div>
+                             {/* Radar limpio */}
                              <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
-                               {/* Anillos */}
                                {Array.from({length:RINGS}).map((_,ri)=>(
                                  <circle key={ri} cx={cx} cy={cy} r={R*((ri+1)/RINGS)}
                                    fill="none"
-                                   stroke={ri===RINGS-1?'#1e2d3d':'#111827'}
-                                   strokeWidth={ri===RINGS-1?1.5:0.75}
-                                   strokeDasharray={ri<RINGS-1?'2 4':''}
-                                 />
+                                   stroke={ri===RINGS-1?'#1e3a5f':'#0f1a2a'}
+                                   strokeWidth={ri===RINGS-1?1.5:1}/>
                                ))}
-                               {/* Escala */}
                                {[1,2,3,4,5].map(v=>(
-                                 <text key={v} x={cx+5} y={cy-R*(v/5)+4}
-                                   fill="#2d3f50" fontSize={8} fontWeight="800" fontFamily="system-ui,sans-serif">{v}</text>
+                                 <text key={v} x={cx+4} y={cy-R*(v/5)+3}
+                                   fill="#1e3a5f" fontSize={7} fontWeight="900" fontFamily="system-ui,sans-serif">{v}</text>
                                ))}
-                               {/* Ejes */}
-                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#1f2937" strokeWidth={1}/>;}) }
-                               {/* Polígono */}
+                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#0f1a2a" strokeWidth={1}/>;}) }
                                <polygon points={polygon} fill={area.fill} stroke="none"/>
-                               <polygon points={polygon} fill="none" stroke={area.stroke} strokeWidth={2.5} strokeLinejoin="round" opacity={0.95}/>
-                               {/* Badges y etiquetas */}
+                               <polygon points={polygon} fill="none" stroke={area.color} strokeWidth={2} strokeLinejoin="round"/>
                                {vals.map((d,i)=>{
                                  const a=start+i*step;
-                                 const bp=pt(a,BADGE_R), lp=pt(a,LABEL_R);
-                                 const anch=textAnch(a);
-                                 const words=d.label.split(' ');
-                                 return(
-                                   <g key={i}>
-                                     <circle cx={cx+d.norm*R*Math.cos(a)} cy={cy+d.norm*R*Math.sin(a)}
-                                       r={4} fill={area.stroke} opacity={d.raw>0?1:0}/>
-                                     <rect x={bp.x-15} y={bp.y-12} width={30} height={22} rx={5}
-                                       fill={area.badge} stroke={area.stroke} strokeWidth={0.75}/>
-                                     <text x={bp.x} y={bp.y+5} textAnchor="middle"
-                                       fill="white" fontSize={11} fontWeight="900" fontFamily="system-ui,sans-serif">
-                                       {d.raw||'–'}
-                                     </text>
-                                     <text x={lp.x} y={lp.y} textAnchor={anch}
-                                       fill="#94a3b8" fontSize={9.5} fontWeight="700" fontFamily="system-ui,sans-serif">
-                                       {words.length===1
-                                         ?<tspan dominantBaseline="middle">{d.label}</tspan>
-                                         :words.map((w,wi)=>(
-                                           <tspan key={wi} x={lp.x} dy={wi===0?firstDy(a):'1.2em'}>{w}</tspan>
-                                         ))
-                                       }
-                                     </text>
-                                   </g>
-                                 );
+                                 return <circle key={i} cx={cx+d.norm*R*Math.cos(a)} cy={cy+d.norm*R*Math.sin(a)}
+                                   r={3} fill={area.color} opacity={d.raw>0?1:0}/>;
                                })}
                              </svg>
-                             <p className="text-center text-[8px] font-black text-slate-800 uppercase tracking-[0.2em] pb-3">AS Pro Scout · Escala 1–5</p>
+                             {/* Tabla de valores — cero solapamientos */}
+                             <div className="px-4 pb-4 space-y-1.5">
+                               {vals.map((d,i)=>(
+                                 <div key={i} className="flex items-center gap-2">
+                                   <span className="text-[10px] text-slate-400 font-bold w-28 shrink-0 truncate">{d.label}</span>
+                                   <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                                     <div className="h-full rounded-full" style={{width:`${d.norm*100}%`, background:area.color}}/>
+                                   </div>
+                                   <span className="text-[11px] font-black w-4 text-right" style={{color:area.color}}>{d.raw||'–'}</span>
+                                 </div>
+                               ))}
+                             </div>
                            </div>
                          );
                        })}
