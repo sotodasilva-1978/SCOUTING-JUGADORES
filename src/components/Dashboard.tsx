@@ -252,7 +252,7 @@ export const Dashboard = memo(function Dashboard({
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.25em] mb-3">
             AS PRO SCOUT
           </span>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter italic uppercase leading-[0.85]">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter italic uppercase leading-tight">
             U.D. SANTA MARIÑA
             <span className="block text-emerald-500 text-base sm:text-lg md:text-2xl mt-2 md:mt-4 not-italic font-black tracking-[0.25em] md:tracking-[0.3em] uppercase opacity-90">
               Resumen Activos
