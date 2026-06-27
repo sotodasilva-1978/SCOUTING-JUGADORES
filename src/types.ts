@@ -110,6 +110,10 @@ export interface Player {
   area?: string;
   source?: string;
   avatar_url?: string;
+  contact_own?: string;
+  contact_tutor1?: string;
+  contact_tutor1_role?: string;
+  contact_other?: string;
   status: PlayerStatus;
   interest_level: number; // 1-5
   global_rating?: number;

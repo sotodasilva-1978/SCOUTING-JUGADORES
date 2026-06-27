@@ -183,6 +183,10 @@ CREATE TABLE IF NOT EXISTS players (
   weight_kg DECIMAL,
   info_source TEXT,
   general_observations TEXT,
+  contact_own TEXT,
+  contact_tutor1 TEXT,
+  contact_tutor1_role TEXT,
+  contact_other TEXT,
   verification_status JSONB DEFAULT '{}'::jsonb,
   
   has_video BOOLEAN DEFAULT false,

@@ -242,11 +242,12 @@ export const Dashboard = memo(function Dashboard({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-1000 pb-20">
-      <div className="flex flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800/50">
+      <div className="relative flex flex-row items-center justify-between gap-4 px-6 py-6 mb-2 rounded-2xl overflow-hidden" style={{ minHeight: '140px', backgroundImage: 'url("https://xkjzgknmeqmpxoophcka.supabase.co/storage/v1/object/public/imagenes-ayuda/COTOGRANDE.jpg")', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        <div className="absolute inset-0 bg-slate-950/77 rounded-2xl"></div>
         <motion.div
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
-           className="min-w-0"
+           className="min-w-0 relative z-10"
         >
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.25em] mb-3">
             AS PRO SCOUT
@@ -254,16 +255,17 @@ export const Dashboard = memo(function Dashboard({
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter italic uppercase leading-[0.85]">
             U.D. SANTA MARIÑA
             <span className="block text-emerald-500 text-base sm:text-lg md:text-2xl mt-2 md:mt-4 not-italic font-black tracking-[0.25em] md:tracking-[0.3em] uppercase opacity-90">
-              Centro de Operaciones
+              Resumen Activos
             </span>
           </h1>
         </motion.div>
 
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center shrink-0 relative z-10">
           <img
             src="/assets/udosantamarina.png"
             alt="U.D. Santa Mariña"
-            className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 object-contain drop-shadow-2xl"
+            className="h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 object-contain drop-shadow-2xl"
+            style={{ transform: 'rotate(15deg)' }}
           />
         </div>
       </div>

@@ -538,9 +538,6 @@ export function PlayerDetail({
                 <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.2em] shadow-sm", getStatusColor(player.status))}>
                    {PLAYER_STATUS_OPTIONS.find(o => o.value === player.status)?.label || player.status}
                 </div>
-                {player.ref_code && (
-                  <span className="ref-chip"><span className="text-slate-600 mr-1">ID</span>{player.ref_code}</span>
-                )}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 text-sm font-bold">
                 <span className="text-emerald-500">{player.club_name}</span>
@@ -1195,6 +1192,24 @@ export function PlayerDetail({
                         {value: 'ENTRENADORES', label: 'Entrenadores'},
                         {value: 'OTROS', label: 'Otros'},
                       ])}
+                   </div>
+
+                   {/* Bloque Contactos */}
+                   <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {renderDataField('Contacto Propio', 'contact_own')}
+                      {renderDataField('Contacto Tutor 1', 'contact_tutor1')}
+                      {renderDataField('Rol Tutor 1', 'contact_tutor1_role', 'select', [
+                        {value: 'PADRE', label: 'Padre'},
+                        {value: 'MADRE', label: 'Madre'},
+                        {value: 'ABUELO', label: 'Abuelo'},
+                        {value: 'ABUELA', label: 'Abuela'},
+                        {value: 'TUTOR_LEGAL', label: 'Tutor Legal'},
+                        {value: 'HERMANO', label: 'Hermano/a'},
+                        {value: 'TIO', label: 'Tío/a'},
+                        {value: 'AGENTE', label: 'Agente'},
+                        {value: 'OTRO', label: 'Otro'},
+                      ])}
+                      {renderDataField('Otro Contacto', 'contact_other')}
                    </div>
 
                    {/* Observaciones */}

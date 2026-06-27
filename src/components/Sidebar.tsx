@@ -61,7 +61,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const navItems = [
-    { id: 'dashboard', label: 'Panel', icon: LayoutDashboard, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT', 'GUEST'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT', 'GUEST'] },
     { id: 'players', label: 'Jugadores', icon: Users, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT', 'GUEST'] },
     { id: 'comparativas', label: 'Comparar', icon: Crosshair, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT'] },
     { id: 'matches', label: 'Agenda', icon: Trophy, roles: ['SUPERADMIN', 'ADMIN_CLUB', 'SCOUT'] },

@@ -217,6 +217,7 @@ export default function App() {
       'current_level_club', 'future_level_estimated', 'comparison_players', 'technical_profile',
       'tactical_profile', 'physical_profile', 'mental_profile', 'birth_place', 'passport',
       'agent_name', 'weight_kg', 'info_source', 'general_observations', 'verification_status',
+      'contact_own', 'contact_tutor1', 'contact_tutor1_role', 'contact_other',
       'created_by', 'decision_final', 'decision_date', 'possible_duplicate'
     ];
 
@@ -229,26 +230,34 @@ export default function App() {
 
     if (!isValidUUID(cleaned.id)) delete cleaned.id;
     
-    // Fix foreign keys
-    // club_id debe corresponder al CLUB REAL del jugador (club_name), NUNCA al
-    // primer club que exista. Si no hay un UUID válido, lo resolvemos por nombre
-    // (buscar-o-crear) para que cada club tenga su propio id.
-    if (!isValidUUID(cleaned.club_id)) {
+    // Fix foreign keys — resolve club_id by name (buscar-o-crear) si el UUID no
+    // existe en la tabla clubs, evitando violaciones de FK.
+    const resolveClubByName = async () => {
       delete cleaned.club_id;
       const clubName = (cleaned.club_name || '').trim();
-      if (clubName) {
-        const { data: existing } = await supabase
-          .from('clubs').select('id').ilike('name', clubName).limit(1);
-        if (existing && existing[0]) {
-          cleaned.club_id = existing[0].id;
-        } else {
-          const { data: created } = await supabase
-            .from('clubs')
-            .insert({ name: clubName, current_season: '2026/2027' })
-            .select('id')
-            .single();
-          if (created) cleaned.club_id = created.id;
-        }
+      if (!clubName) return;
+      const { data: existing } = await supabase
+        .from('clubs').select('id').ilike('name', clubName).limit(1);
+      if (existing && existing[0]) {
+        cleaned.club_id = existing[0].id;
+      } else {
+        const { data: created } = await supabase
+          .from('clubs')
+          .insert({ name: clubName, current_season: '2026/2027' })
+          .select('id')
+          .single();
+        if (created) cleaned.club_id = created.id;
+      }
+    };
+
+    if (!isValidUUID(cleaned.club_id)) {
+      await resolveClubByName();
+    } else {
+      // UUID válido en formato pero puede no existir en la tabla
+      const { data: clubExists } = await supabase
+        .from('clubs').select('id').eq('id', cleaned.club_id).limit(1);
+      if (!clubExists || !clubExists[0]) {
+        await resolveClubByName();
       }
     }
     
