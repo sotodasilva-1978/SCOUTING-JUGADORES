@@ -85,105 +85,151 @@ const COLOR_B = { stroke: '#fb7185', fill: 'rgba(251,113,133,0.25)', badge: '#4c
 // ── Radar superpuesto ────────────────────────────────────────────────────────
 
 function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player | null; key?: string }) {
-  const area = AREAS[areaKey];
-  const W = 300, H = 300, cx = 150, cy = 150, R = 110, RINGS = 5;
+  const area  = AREAS[areaKey];
+  const W = 460, H = 400;
+  const cx = 230, cy = 200;
+  const R = 108, RINGS = 5;
+  const BADGE_R = R + 20;   // badges de valor justo más allá del anillo exterior
+  const LABEL_R = R + 52;   // etiquetas de atributo fuera de los badges
   const n = area.attrs.length;
   const step = (2 * Math.PI) / n;
   const start = -Math.PI / 2;
+
   const pt = (a: number, r: number) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
 
   const getVals = (p: Player) =>
     area.attrs.map(attr => {
       const raw = Number((p as unknown as Record<string, unknown>)[attr.field]) || 0;
-      return { label: attr.label, raw, norm: raw / 5 };
+      return { raw, norm: raw / 5 };
     });
 
   const valsA = getVals(playerA);
   const valsB = playerB ? getVals(playerB) : null;
 
-  const polygon = (vals: typeof valsA) =>
+  const polyPts = (vals: typeof valsA) =>
     vals.map((d, i) => {
       const a = start + i * step;
       return `${cx + d.norm * R * Math.cos(a)},${cy + d.norm * R * Math.sin(a)}`;
     }).join(' ');
 
+  const anch = (a: number) => Math.cos(a) > 0.2 ? 'start' : Math.cos(a) < -0.2 ? 'end' : 'middle';
+  const dy0  = (a: number, multi: boolean) =>
+    multi ? (Math.sin(a) < -0.3 ? '-0.6em' : '0em') : '-0.35em';
+
+  const nameA = playerA.short_name || playerA.full_name.split(' ')[0];
+  const nameB = playerB ? (playerB.short_name || playerB.full_name.split(' ')[0]) : '';
+
   return (
-    <div className="rounded-2xl border border-slate-700/30 overflow-hidden shadow-xl" style={{ background: '#080c14' }}>
-      {/* Cabecera */}
-      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full" style={{ background: area.color }} />
-        <p className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: area.color }}>
-          {area.label}
-        </p>
+    <div className="rounded-2xl border border-slate-700/40 shadow-2xl" style={{ background: '#070c15' }}>
+      {/* Cabecera + leyenda */}
+      <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ background: area.color }} />
+          <p className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: area.color }}>{area.label}</p>
+        </div>
+        {valsB && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-0.5 rounded" style={{ background: COLOR_A.stroke }} />
+              <span className="text-[9px] font-black uppercase" style={{ color: COLOR_A.text }}>{nameA}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg width="16" height="3"><line x1="0" y1="1.5" x2="16" y2="1.5" stroke={COLOR_B.stroke} strokeWidth="2" strokeDasharray="4 2"/></svg>
+              <span className="text-[9px] font-black uppercase" style={{ color: COLOR_B.text }}>{nameB}</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Radar limpio — sin etiquetas internas */}
+      {/* SVG principal */}
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
+        {/* Anillos con relleno alternado */}
         {Array.from({ length: RINGS }).map((_, ri) => (
           <circle key={ri} cx={cx} cy={cy} r={R * ((ri + 1) / RINGS)}
-            fill="none"
-            stroke={ri === RINGS - 1 ? '#1e3a5f' : '#0f1a2a'}
-            strokeWidth={ri === RINGS - 1 ? 1.5 : 1}
+            fill={ri % 2 === 0 ? '#0b1422' : 'transparent'}
+            stroke={ri === RINGS - 1 ? '#1e3a5f' : '#0e1e30'}
+            strokeWidth={ri === RINGS - 1 ? 1.5 : 0.75}
           />
         ))}
-        {/* Escala en el eje superior */}
+        {/* Marca de escala 1-5 en eje superior */}
         {[1,2,3,4,5].map(v => (
-          <text key={v} x={cx + 4} y={cy - R * (v / 5) + 3}
+          <text key={v} x={cx + 3} y={cy - R * (v / 5) + 3}
             fill="#1e3a5f" fontSize={7} fontWeight="900" fontFamily="system-ui,sans-serif">{v}</text>
         ))}
-        {/* Ejes radiales */}
-        {Array.from({ length: n }).map((_, i) => {
+        {/* Radios */}
+        {area.attrs.map((_, i) => {
           const a = start + i * step, o = pt(a, R);
-          return <line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#0f1a2a" strokeWidth={1} />;
+          return <line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#0e1e30" strokeWidth={1} />;
         })}
+
         {/* Polígono B */}
         {valsB && <>
-          <polygon points={polygon(valsB)} fill={COLOR_B.fill} stroke="none" />
-          <polygon points={polygon(valsB)} fill="none" stroke={COLOR_B.stroke}
-            strokeWidth={1.5} strokeLinejoin="round" strokeDasharray="4 2" />
+          <polygon points={polyPts(valsB)} fill={COLOR_B.fill} stroke="none" />
+          <polygon points={polyPts(valsB)} fill="none" stroke={COLOR_B.stroke}
+            strokeWidth={1.5} strokeLinejoin="round" strokeDasharray="5 2.5" />
+          {valsB.map((d, i) => {
+            const a = start + i * step;
+            return d.raw > 0
+              ? <circle key={i} cx={cx + d.norm * R * Math.cos(a)} cy={cy + d.norm * R * Math.sin(a)} r={2.5} fill={COLOR_B.stroke} />
+              : null;
+          })}
         </>}
+
         {/* Polígono A */}
-        <polygon points={polygon(valsA)} fill={COLOR_A.fill} stroke="none" />
-        <polygon points={polygon(valsA)} fill="none" stroke={COLOR_A.stroke}
-          strokeWidth={2} strokeLinejoin="round" />
-        {/* Puntos vértice */}
+        <polygon points={polyPts(valsA)} fill={COLOR_A.fill} stroke="none" />
+        <polygon points={polyPts(valsA)} fill="none" stroke={COLOR_A.stroke} strokeWidth={2} strokeLinejoin="round" />
         {valsA.map((d, i) => {
           const a = start + i * step;
-          return <circle key={i} cx={cx + d.norm * R * Math.cos(a)} cy={cy + d.norm * R * Math.sin(a)}
-            r={3} fill={COLOR_A.stroke} opacity={d.raw > 0 ? 1 : 0} />;
+          return d.raw > 0
+            ? <circle key={i} cx={cx + d.norm * R * Math.cos(a)} cy={cy + d.norm * R * Math.sin(a)} r={3} fill={COLOR_A.stroke} />
+            : null;
         })}
-        {valsB && valsB.map((d, i) => {
-          const a = start + i * step;
-          return <circle key={i} cx={cx + d.norm * R * Math.cos(a)} cy={cy + d.norm * R * Math.sin(a)}
-            r={3} fill={COLOR_B.stroke} opacity={d.raw > 0 ? 1 : 0} />;
-        })}
-      </svg>
 
-      {/* Tabla de valores — sin solapamientos posibles */}
-      <div className="px-4 pb-4 space-y-1.5">
-        {valsA.map((dA, i) => {
-          const dB = valsB?.[i];
+        {/* Badges de valor + etiquetas de atributo por radio */}
+        {area.attrs.map((attr, i) => {
+          const a    = start + i * step;
+          const bp   = pt(a, BADGE_R);
+          const lp   = pt(a, LABEL_R);
+          const ta   = anch(a);
+          const words = attr.label.split(' ');
+          const multi = words.length > 1;
+          const valA = valsA[i].raw;
+          const valB = valsB?.[i]?.raw;
+          const BW = 22, BH = 13;
           return (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-bold w-28 shrink-0 truncate">{dA.label}</span>
-              <div className="flex-1 flex items-center gap-1">
-                <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${dA.norm * 100}%`, background: COLOR_A.stroke }} />
-                </div>
-                <span className="text-[11px] font-black w-5 text-right" style={{ color: COLOR_A.text }}>{dA.raw || '–'}</span>
-              </div>
-              {dB !== undefined && (
-                <div className="flex-1 flex items-center gap-1">
-                  <span className="text-[11px] font-black w-5 text-left" style={{ color: COLOR_B.text }}>{dB.raw || '–'}</span>
-                  <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${dB.norm * 100}%`, background: COLOR_B.stroke }} />
-                  </div>
-                </div>
-              )}
-            </div>
+            <g key={i}>
+              {/* Badge jugador A */}
+              <rect x={bp.x - BW / 2} y={bp.y - (valsB ? BH + 1 : BH / 2)} width={BW} height={BH} rx={4}
+                fill={COLOR_A.badge} opacity={valA > 0 ? 1 : 0.3} />
+              <text x={bp.x} y={bp.y - (valsB ? BH + 1 : BH / 2) + BH * 0.72}
+                textAnchor="middle" fill={COLOR_A.text} fontSize={9} fontWeight="900" fontFamily="system-ui,sans-serif">
+                {valA || '–'}
+              </text>
+              {/* Badge jugador B */}
+              {valsB && <>
+                <rect x={bp.x - BW / 2} y={bp.y + 1} width={BW} height={BH} rx={4}
+                  fill={COLOR_B.badge} opacity={(valB ?? 0) > 0 ? 1 : 0.3} />
+                <text x={bp.x} y={bp.y + 1 + BH * 0.72}
+                  textAnchor="middle" fill={COLOR_B.text} fontSize={9} fontWeight="900" fontFamily="system-ui,sans-serif">
+                  {(valB ?? 0) > 0 ? valB : '–'}
+                </text>
+              </>}
+              {/* Etiqueta atributo */}
+              <text x={lp.x} y={lp.y} textAnchor={ta}
+                fill="#94a3b8" fontSize={10} fontWeight="700" fontFamily="system-ui,sans-serif">
+                {multi ? (
+                  <>
+                    <tspan x={lp.x} dy={dy0(a, true)}>{words[0]}</tspan>
+                    <tspan x={lp.x} dy="1.15em">{words.slice(1).join(' ')}</tspan>
+                  </>
+                ) : (
+                  <tspan dy={dy0(a, false)}>{attr.label}</tspan>
+                )}
+              </text>
+            </g>
           );
         })}
-      </div>
+      </svg>
     </div>
   );
 }

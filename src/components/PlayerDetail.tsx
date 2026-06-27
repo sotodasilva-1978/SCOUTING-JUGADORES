@@ -1027,64 +1027,79 @@ export function PlayerDetail({
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                        {(['fisicas','tecnicas','tacticas','cognitivas'] as const).map(catId => {
                          const areaMap = {
-                           fisicas:    { label:'FÍSICAS',    color:'#10b981', fill:'rgba(16,185,129,0.20)'  },
-                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', fill:'rgba(96,165,250,0.20)'  },
-                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', fill:'rgba(167,139,250,0.20)' },
-                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', fill:'rgba(251,191,36,0.18)'  },
+                           fisicas:    { label:'FÍSICAS',    color:'#10b981', fill:'rgba(16,185,129,0.20)',  badge:'#052e1e', text:'#6ee7b7' },
+                           tecnicas:   { label:'TÉCNICAS',   color:'#60a5fa', fill:'rgba(96,165,250,0.20)',  badge:'#1e3a5f', text:'#93c5fd' },
+                           tacticas:   { label:'TÁCTICAS',   color:'#a78bfa', fill:'rgba(167,139,250,0.20)', badge:'#2e1e5f', text:'#c4b5fd' },
+                           cognitivas: { label:'COGNITIVAS', color:'#fbbf24', fill:'rgba(251,191,36,0.18)',  badge:'#3d2800', text:'#fde68a' },
                          } as const;
                          const area = areaMap[catId];
                          const attrs = RATING_CATEGORIES[catId];
-                         const W=300, H=300, cx=150, cy=150, R=110, RINGS=5;
+                         const W=460, H=400, rcx=230, rcy=200, R=108, RINGS=5;
+                         const BADGE_R=R+20, LABEL_R=R+52;
                          const n=attrs.length, step=(2*Math.PI)/n, start=-Math.PI/2;
-                         const pt=(a:number,r:number)=>({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
+                         const pt=(a:number,r:number)=>({x:rcx+r*Math.cos(a),y:rcy+r*Math.sin(a)});
+                         const anch=(a:number)=>Math.cos(a)>0.2?'start':Math.cos(a)<-0.2?'end':'middle';
+                         const dy0=(a:number,multi:boolean)=>multi?(Math.sin(a)<-0.3?'-0.6em':'0em'):'-0.35em';
                          const vals=attrs.map(attr=>{
                            const raw=Number(formData[attr.field as keyof Player])||0;
                            return {label:attr.label, raw, norm:raw/5};
                          });
                          const polygon=vals.map((d,i)=>{
                            const a=start+i*step;
-                           return `${cx+d.norm*R*Math.cos(a)},${cy+d.norm*R*Math.sin(a)}`;
+                           return `${rcx+d.norm*R*Math.cos(a)},${rcy+d.norm*R*Math.sin(a)}`;
                          }).join(' ');
+                         const BW=22, BH=13;
                          return (
-                           <div key={catId} className="rounded-2xl border border-slate-700/30 overflow-hidden shadow-xl" style={{background:'#080c14'}}>
-                             {/* Cabecera */}
+                           <div key={catId} className="rounded-2xl border border-slate-700/30 shadow-xl" style={{background:'#080c14'}}>
                              <div className="px-5 pt-4 pb-2 flex items-center gap-2">
                                <div className="w-2 h-2 rounded-full" style={{background:area.color}}/>
                                <p className="text-[10px] font-black uppercase tracking-[0.3em]" style={{color:area.color}}>{area.label}</p>
                              </div>
-                             {/* Radar limpio */}
                              <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
                                {Array.from({length:RINGS}).map((_,ri)=>(
-                                 <circle key={ri} cx={cx} cy={cy} r={R*((ri+1)/RINGS)}
-                                   fill="none"
-                                   stroke={ri===RINGS-1?'#1e3a5f':'#0f1a2a'}
-                                   strokeWidth={ri===RINGS-1?1.5:1}/>
+                                 <circle key={ri} cx={rcx} cy={rcy} r={R*((ri+1)/RINGS)}
+                                   fill={ri%2===0?'#0b1422':'transparent'}
+                                   stroke={ri===RINGS-1?'#1e3a5f':'#0e1e30'}
+                                   strokeWidth={ri===RINGS-1?1.5:0.75}/>
                                ))}
                                {[1,2,3,4,5].map(v=>(
-                                 <text key={v} x={cx+4} y={cy-R*(v/5)+3}
+                                 <text key={v} x={rcx+3} y={rcy-R*(v/5)+3}
                                    fill="#1e3a5f" fontSize={7} fontWeight="900" fontFamily="system-ui,sans-serif">{v}</text>
                                ))}
-                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#0f1a2a" strokeWidth={1}/>;}) }
+                               {vals.map((_,i)=>{const a=start+i*step,o=pt(a,R);return<line key={i} x1={rcx} y1={rcy} x2={o.x} y2={o.y} stroke="#0e1e30" strokeWidth={1}/>;}) }
                                <polygon points={polygon} fill={area.fill} stroke="none"/>
                                <polygon points={polygon} fill="none" stroke={area.color} strokeWidth={2} strokeLinejoin="round"/>
                                {vals.map((d,i)=>{
                                  const a=start+i*step;
-                                 return <circle key={i} cx={cx+d.norm*R*Math.cos(a)} cy={cy+d.norm*R*Math.sin(a)}
+                                 return <circle key={i} cx={rcx+d.norm*R*Math.cos(a)} cy={rcy+d.norm*R*Math.sin(a)}
                                    r={3} fill={area.color} opacity={d.raw>0?1:0}/>;
                                })}
+                               {/* Badge de valor + etiqueta por radio */}
+                               {vals.map((d,i)=>{
+                                 const a=start+i*step;
+                                 const bp=pt(a,BADGE_R), lp=pt(a,LABEL_R);
+                                 const ta=anch(a);
+                                 const words=d.label.split(' '), multi=words.length>1;
+                                 return (
+                                   <g key={i}>
+                                     <rect x={bp.x-BW/2} y={bp.y-BH/2} width={BW} height={BH} rx={4}
+                                       fill={area.badge} opacity={d.raw>0?1:0.3}/>
+                                     <text x={bp.x} y={bp.y-BH/2+BH*0.72}
+                                       textAnchor="middle" fill={area.text} fontSize={9} fontWeight="900" fontFamily="system-ui,sans-serif">
+                                       {d.raw||'–'}
+                                     </text>
+                                     <text x={lp.x} y={lp.y} textAnchor={ta}
+                                       fill="#94a3b8" fontSize={10} fontWeight="700" fontFamily="system-ui,sans-serif">
+                                       {multi?(
+                                         <><tspan x={lp.x} dy={dy0(a,true)}>{words[0]}</tspan><tspan x={lp.x} dy="1.15em">{words.slice(1).join(' ')}</tspan></>
+                                       ):(
+                                         <tspan dy={dy0(a,false)}>{d.label}</tspan>
+                                       )}
+                                     </text>
+                                   </g>
+                                 );
+                               })}
                              </svg>
-                             {/* Tabla de valores — cero solapamientos */}
-                             <div className="px-4 pb-4 space-y-1.5">
-                               {vals.map((d,i)=>(
-                                 <div key={i} className="flex items-center gap-2">
-                                   <span className="text-[10px] text-slate-400 font-bold w-28 shrink-0 truncate">{d.label}</span>
-                                   <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                                     <div className="h-full rounded-full" style={{width:`${d.norm*100}%`, background:area.color}}/>
-                                   </div>
-                                   <span className="text-[11px] font-black w-4 text-right" style={{color:area.color}}>{d.raw||'–'}</span>
-                                 </div>
-                               ))}
-                             </div>
                            </div>
                          );
                        })}
