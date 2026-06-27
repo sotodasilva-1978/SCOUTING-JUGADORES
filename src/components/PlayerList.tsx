@@ -423,9 +423,9 @@ export const PlayerList = memo(function PlayerList({
                       {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover rounded-2xl" /> : <User className="w-8 h-8 opacity-20" />}
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors">{player.full_name}</h4>
-                      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">
-                        {player.main_position} • {calculateCategory(player.birth_year)} • {player.birth_year || 'N/R'} ({player.calculated_age}A)
+                      <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors truncate max-w-[160px] sm:max-w-none">{player.full_name}</h4>
+                      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1 truncate max-w-[160px] sm:max-w-none">
+                        {player.main_position} · {calculateCategory(player.birth_year)} · {player.birth_year || 'N/R'} ({player.calculated_age}A)
                       </p>
                     </div>
                   </div>

@@ -532,25 +532,25 @@ export function PlayerDetail({
               </div>
               <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(player.status))} />
             </div>
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tighter">{player.full_name}</h1>
-                <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.2em] shadow-sm", getStatusColor(player.status))}>
+            <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate max-w-full">{player.full_name}</h1>
+                <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0", getStatusColor(player.status))}>
                    {PLAYER_STATUS_OPTIONS.find(o => o.value === player.status)?.label || player.status}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 text-sm font-bold">
+              <p className="text-xs sm:text-sm font-bold text-slate-400 truncate">
                 <span className="text-emerald-500">{player.club_name}</span>
-                <span>•</span>
+                <span className="mx-2 text-slate-700">·</span>
                 <span className="uppercase text-slate-300">{calculateCategory(player.birth_year)}</span>
-                <span>•</span>
+                <span className="mx-2 text-slate-700">·</span>
                 <span>{player.birth_year} ({player.calculated_age} años)</span>
-              </div>
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
-             <button onClick={onEdit} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"><Edit3 size={16} /></button>
+          <div className="grid grid-cols-4 sm:flex sm:flex-wrap items-center gap-2 w-full xl:w-auto">
+             <button onClick={onEdit} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-all flex items-center justify-center"><Edit3 size={16} /></button>
              
              {showDeleteConfirm ? (
                 <div className="flex items-center gap-1 bg-rose-500 rounded-xl overflow-hidden shadow-lg animate-in zoom-in-95 duration-200">
