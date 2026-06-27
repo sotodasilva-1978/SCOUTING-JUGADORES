@@ -217,7 +217,7 @@ export default function App() {
       'current_level_club', 'future_level_estimated', 'comparison_players', 'technical_profile',
       'tactical_profile', 'physical_profile', 'mental_profile', 'birth_place', 'passport',
       'agent_name', 'weight_kg', 'info_source', 'general_observations', 'verification_status',
-      'contact_own', 'contact_tutor1', 'contact_tutor1_role', 'contact_other',
+      'contact_own', 'contact_tutor1', 'contact_tutor1_role', 'contact_other', 'contact_other_role',
       'created_by', 'decision_final', 'decision_date', 'possible_duplicate'
     ];
 

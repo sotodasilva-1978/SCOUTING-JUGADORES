@@ -1212,22 +1212,92 @@ export function PlayerDetail({
                    </div>
 
                    {/* Bloque Contactos */}
-                   <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {renderDataField('Contacto Propio', 'contact_own')}
-                      {renderDataField('Contacto Tutor 1', 'contact_tutor1')}
-                      {renderDataField('Rol Tutor 1', 'contact_tutor1_role', 'select', [
-                        {value: 'PADRE', label: 'Padre'},
-                        {value: 'MADRE', label: 'Madre'},
-                        {value: 'ABUELO', label: 'Abuelo'},
-                        {value: 'ABUELA', label: 'Abuela'},
-                        {value: 'TUTOR_LEGAL', label: 'Tutor Legal'},
-                        {value: 'HERMANO', label: 'Hermano/a'},
-                        {value: 'TIO', label: 'Tío/a'},
-                        {value: 'AGENTE', label: 'Agente'},
-                        {value: 'OTRO', label: 'Otro'},
-                      ])}
-                      {renderDataField('Otro Contacto', 'contact_other')}
-                   </div>
+                   {(() => {
+                     const ROL_OPTIONS = [
+                       {value: 'PADRE',       label: 'Padre'},
+                       {value: 'MADRE',       label: 'Madre'},
+                       {value: 'ABUELO',      label: 'Abuelo'},
+                       {value: 'ABUELA',      label: 'Abuela'},
+                       {value: 'TUTOR_LEGAL', label: 'Tutor Legal'},
+                       {value: 'HERMANO',     label: 'Hermano/a'},
+                       {value: 'TIO',         label: 'Tío/a'},
+                       {value: 'AGENTE',      label: 'Agente'},
+                       {value: 'OTRO',        label: 'Otro'},
+                     ];
+                     const rolLabel = (val?: string) => ROL_OPTIONS.find(o => o.value === val)?.label || val || '—';
+                     return (
+                       <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                         {/* Contacto Propio */}
+                         {renderDataField('Contacto Propio', 'contact_own')}
+
+                         {/* Contacto Tutor */}
+                         <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3">
+                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Contacto Tutor</label>
+                           {editMode ? (
+                             <>
+                               <input
+                                 type="text"
+                                 value={formData.contact_tutor1 || ''}
+                                 onChange={e => setFormData(prev => ({ ...prev, contact_tutor1: e.target.value }))}
+                                 placeholder="Teléfono..."
+                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50"
+                               />
+                               <select
+                                 value={formData.contact_tutor1_role || ''}
+                                 onChange={e => setFormData(prev => ({ ...prev, contact_tutor1_role: e.target.value }))}
+                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50 appearance-none"
+                               >
+                                 <option value="">Rol...</option>
+                                 {ROL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                               </select>
+                             </>
+                           ) : (
+                             <>
+                               <p className="text-sm font-bold text-slate-200">{formData.contact_tutor1 || '—'}</p>
+                               {formData.contact_tutor1_role && (
+                                 <span className="inline-block px-2 py-0.5 bg-slate-800 rounded text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                   {rolLabel(formData.contact_tutor1_role)}
+                                 </span>
+                               )}
+                             </>
+                           )}
+                         </div>
+
+                         {/* Otro Contacto */}
+                         <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3">
+                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Otro Contacto</label>
+                           {editMode ? (
+                             <>
+                               <input
+                                 type="text"
+                                 value={formData.contact_other || ''}
+                                 onChange={e => setFormData(prev => ({ ...prev, contact_other: e.target.value }))}
+                                 placeholder="Teléfono..."
+                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50"
+                               />
+                               <select
+                                 value={formData.contact_other_role || ''}
+                                 onChange={e => setFormData(prev => ({ ...prev, contact_other_role: e.target.value }))}
+                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50 appearance-none"
+                               >
+                                 <option value="">Rol...</option>
+                                 {ROL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                               </select>
+                             </>
+                           ) : (
+                             <>
+                               <p className="text-sm font-bold text-slate-200">{formData.contact_other || '—'}</p>
+                               {formData.contact_other_role && (
+                                 <span className="inline-block px-2 py-0.5 bg-slate-800 rounded text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                   {rolLabel(formData.contact_other_role)}
+                                 </span>
+                               )}
+                             </>
+                           )}
+                         </div>
+                       </div>
+                     );
+                   })()}
 
                    {/* Observaciones */}
                    <div className="lg:col-span-full">

@@ -114,6 +114,7 @@ export interface Player {
   contact_tutor1?: string;
   contact_tutor1_role?: string;
   contact_other?: string;
+  contact_other_role?: string;
   status: PlayerStatus;
   interest_level: number; // 1-5
   global_rating?: number;
