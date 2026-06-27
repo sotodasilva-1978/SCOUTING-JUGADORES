@@ -243,7 +243,7 @@ export const Dashboard = memo(function Dashboard({
   return (
     <div className="space-y-10 animate-in fade-in duration-1000 pb-20">
       <div className="relative flex flex-row items-center justify-between gap-4 px-6 py-6 mb-2 rounded-2xl overflow-hidden" style={{ minHeight: '140px', backgroundImage: 'url("https://xkjzgknmeqmpxoophcka.supabase.co/storage/v1/object/public/imagenes-ayuda/COTOGRANDE.jpg")', backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        <div className="absolute inset-0 bg-slate-950/77 rounded-2xl"></div>
+        <div className="absolute inset-0 bg-slate-950/50 rounded-2xl"></div>
         <motion.div
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
