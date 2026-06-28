@@ -50,12 +50,12 @@ const MOBILE_PRIMARY = ['dashboard', 'players', 'matches', 'reports'];
 
 function BrandMark({ size = 44 }: { size?: number }) {
   return (
-    <div
-      className="relative flex items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-lg shadow-emerald-500/30 shrink-0"
+    <img
+      src="/icon-master.png"
+      alt="AS PRO SCOUT"
+      className="rounded-2xl shrink-0 object-cover shadow-lg shadow-slate-950/40"
       style={{ width: size, height: size }}
-    >
-      <Crosshair className="text-slate-950" size={size * 0.5} strokeWidth={2.5} />
-    </div>
+    />
   );
 }
 
@@ -96,7 +96,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
         className="hidden lg:flex flex-col h-screen sticky top-0 bg-slate-950/80 backdrop-blur-xl border-r border-slate-800/80 transition-all duration-300 z-40 overflow-hidden"
       >
         <div className={cn("px-5 pt-7 pb-5 flex items-center gap-3", isCollapsed && "justify-center px-0")}>
-          <BrandMark size={isCollapsed ? 40 : 44} />
+          <BrandMark size={isCollapsed ? 46 : 54} />
           {!isCollapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0">
               <span className="font-black text-[15px] text-white italic tracking-tighter block leading-none uppercase truncate">U.D. Santa Mariña</span>
@@ -183,7 +183,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
               className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 safe-pb"
             >
               <div className="flex items-center gap-3 mb-5">
-                <BrandMark size={38} />
+                <BrandMark size={44} />
                 <div className="min-w-0">
                   <p className="font-black text-sm text-white italic uppercase tracking-tighter leading-none">U.D. Santa Mariña</p>
                   <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.28em] mt-1">Pro Scout</p>

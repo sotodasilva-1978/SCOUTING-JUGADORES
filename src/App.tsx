@@ -139,13 +139,13 @@ export default function App() {
   // Jugadores filtrados según rol
   const scopedPlayers = useMemo(() => {
     if (userRole === 'ENTREN' && userProfile?.category_id) {
-      return players.filter(p => calculateCategory(p.birth_year ?? 0) === userProfile.category_id);
+      return players.filter(p => calculateCategory(p.birth_year, p.birth_date) === userProfile.category_id);
     }
     if (userRole === 'SCOUT_F11' || userRole === 'COORD_F11') {
-      return players.filter(p => isF11Category(calculateCategory(p.birth_year ?? 0)));
+      return players.filter(p => isF11Category(calculateCategory(p.birth_year, p.birth_date)));
     }
     if (userRole === 'SCOUT_F8' || userRole === 'COORD_F8') {
-      return players.filter(p => isF8Category(calculateCategory(p.birth_year ?? 0)));
+      return players.filter(p => isF8Category(calculateCategory(p.birth_year, p.birth_date)));
     }
     return players;
   }, [players, userRole, userProfile?.category_id]);
@@ -155,19 +155,19 @@ export default function App() {
     if (userRole === 'ENTREN' && userProfile?.category_id) {
       return reports.filter(r => {
         const p = players.find(pl => pl.id === r.player_id);
-        return p && calculateCategory(p.birth_year ?? 0) === userProfile.category_id;
+        return p && calculateCategory(p.birth_year, p.birth_date) === userProfile.category_id;
       });
     }
     if (userRole === 'SCOUT_F11' || userRole === 'COORD_F11') {
       return reports.filter(r => {
         const p = players.find(pl => pl.id === r.player_id);
-        return p && isF11Category(calculateCategory(p.birth_year ?? 0));
+        return p && isF11Category(calculateCategory(p.birth_year, p.birth_date));
       });
     }
     if (userRole === 'SCOUT_F8' || userRole === 'COORD_F8') {
       return reports.filter(r => {
         const p = players.find(pl => pl.id === r.player_id);
-        return p && isF8Category(calculateCategory(p.birth_year ?? 0));
+        return p && isF8Category(calculateCategory(p.birth_year, p.birth_date));
       });
     }
     return reports;
@@ -241,15 +241,9 @@ export default function App() {
       const { data: reportsData } = await supabase.from('reports').select('*');
       if (reportsData && reportsData.length > 0) setReports(reportsData as Report[]);
 
-      const { data: historyData, error: historyError } = await supabase
-        .from('history_logs')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (historyError) {
-        console.warn('History logs fetch warning:', historyError);
-      } else if (historyData && historyData.length > 0) {
-        setHistory(historyData as HistoryLog[]);
-      }
+      const { data: videosData } = await supabase.from('videos').select('*').order('created_at', { ascending: false });
+      if (videosData && videosData.length > 0) setVideos(videosData as Video[]);
+
 
     } catch (err) {
       console.error('Bootstrap error:', err);
@@ -375,21 +369,7 @@ export default function App() {
     }));
     setHistory((prev) => [...optimisticEntries, ...prev]);
 
-    try {
-      const { data, error } = await supabase.from('history_logs').insert(entries).select('*');
-      if (error) {
-        console.error('Error saving history logs:', error);
-        return;
-      }
-      if (data) {
-        setHistory((prev) => [
-          ...(data as HistoryLog[]),
-          ...prev.filter((item) => !optimisticEntries.some((optimistic) => optimistic.id === item.id)),
-        ]);
-      }
-    } catch (error) {
-      console.error('History persistence exception:', error);
-    }
+    // history_logs table not yet created in Supabase — kept in local state only
   };
 
   // Helper to clean report data for Supabase
@@ -451,6 +431,7 @@ export default function App() {
         first_name: newPlayerData.name?.split(' ')[0] || '',
         last_name: newPlayerData.name?.split(' ').slice(1).join(' ') || '',
         main_position: newPlayerData.position,
+        birth_date: newPlayerData.birth_date || undefined,
         birth_year: Number(newPlayerData.birth_year),
         calculated_age: computeAge(newPlayerData.birth_date, Number(newPlayerData.birth_year)),
         dominant_foot: newPlayerData.dominant_foot,
@@ -500,6 +481,7 @@ export default function App() {
         first_name: newPlayerData.name?.split(' ')[0] || '',
         last_name: newPlayerData.name?.split(' ').slice(1).join(' ') || '',
         full_name: newPlayerData.name || 'Sin Nombre',
+        birth_date: newPlayerData.birth_date || undefined,
         birth_year: birthYear,
         calculated_age: computeAge(newPlayerData.birth_date, birthYear),
         category_id: undefined,
@@ -923,23 +905,42 @@ export default function App() {
     setEditingReport(null);
   };
 
+  const detectVideoPlatform = (url: string): string => {
+    if (/youtube\.com|youtu\.be/.test(url)) return 'YOUTUBE';
+    if (/vimeo\.com/.test(url)) return 'VIMEO';
+    return 'OTHER';
+  };
+
   const handleAddVideo = async (videoData: Partial<Video>) => {
-    const newVideo: Video = {
-      id: `v-${Date.now()}`,
+    const videoToInsert = {
       player_id: videoData.player_id!,
-      match_id: videoData.match_id,
+      match_id: videoData.match_id || null,
       url: videoData.url!,
-      platform: 'URL',
+      platform: detectVideoPlatform(videoData.url || ''),
       title: videoData.title || 'Vídeo Scouting',
+      description: videoData.description || null,
       is_key: videoData.is_key || false,
       pending_review: true,
-      created_at: new Date().toISOString(),
     };
-    setVideos([newVideo, ...videos]);
-    setPlayers(prev => prev.map(p => p.id === videoData.player_id ? { ...p, has_video: true } : p));
 
-    // Supabase
-    await supabase.from('videos').insert([newVideo]);
+    // Insertar en Supabase y dejar que genere el UUID
+    const { data, error } = await supabase.from('videos').insert([videoToInsert]).select().single();
+
+    const newVideo: Video = {
+      id: data?.id || crypto.randomUUID(),
+      ...videoToInsert,
+      created_at: data?.created_at || new Date().toISOString(),
+    };
+
+    if (error) console.error('Error guardando vídeo:', error);
+
+    setVideos(prev => [newVideo, ...prev]);
+    setPlayers(prev => prev.map(p => p.id === videoData.player_id ? { ...p, has_video: true } : p));
+  };
+
+  const handleDeleteVideo = async (videoId: string) => {
+    setVideos(prev => prev.filter(v => v.id !== videoId));
+    await supabase.from('videos').delete().eq('id', videoId);
   };
 
   const playerDetailProps = useMemo(() => {
@@ -982,6 +983,7 @@ export default function App() {
         onEdit={() => handleEditPlayer(selectedPlayer)}
         onCreateReport={() => handleCreateReport(selectedPlayer.id)}
         onAddVideo={(v) => handleAddVideo({ ...v, player_id: selectedPlayer.id })}
+        onDeleteVideo={handleDeleteVideo}
         onUpdatePlayer={handleUpdatePlayer}
       />;
     }

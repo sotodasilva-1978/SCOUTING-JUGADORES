@@ -9,6 +9,7 @@ import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/util
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import clubCrest from '../assets/udosantamarina.png';
 
 interface DashboardProps {
   onSelectPlayer: (player: Player) => void;
@@ -47,7 +48,7 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
     };
     players.forEach(p => {
       if (!p) return;
-      const cat = calculateCategory(p.birth_year);
+      const cat = calculateCategory(p.birth_year, p.birth_date);
       if (dist[cat] !== undefined) dist[cat]++;
       else dist['SENIOR']++;
     });
@@ -256,7 +257,7 @@ export const Dashboard = memo(function Dashboard({
 
         <div className="flex items-center shrink-0 relative z-10">
           <img
-            src="/assets/udosantamarina.png"
+            src={clubCrest}
             alt="U.D. Santa Mariña"
             className="h-16 w-16 sm:h-24 sm:w-24 md:h-32 md:w-32 object-contain drop-shadow-2xl shrink-0"
             style={{ transform: 'rotate(15deg)' }}

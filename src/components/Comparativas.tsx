@@ -6,7 +6,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Swords, BarChart2, ChevronDown, X } from 'lucide-react';
 import { Player } from '../types';
-import { cn } from '../lib/utils';
+import { calculateCategory, cn, sortCategories } from '../lib/utils';
 
 // ── Áreas de comparación ────────────────────────────────────────────────────
 
@@ -504,7 +504,7 @@ function PlayerDropdown({
         {selected ? (
           <>
             {selected.avatar_url ? (
-              <img src={selected.avatar_url} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+              <img src={selected.avatar_url} className="w-8 h-8 rounded-lg object-cover object-[center_20%] flex-shrink-0" />
             ) : (
               <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm italic flex-shrink-0"
                 style={{ background: `${color}22`, color }}>
@@ -570,7 +570,7 @@ function PlayerDropdown({
                     )}
                   >
                     {p.avatar_url ? (
-                      <img src={p.avatar_url} className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />
+                      <img src={p.avatar_url} className="w-7 h-7 rounded-lg object-cover object-[center_20%] flex-shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs italic flex-shrink-0"
                         style={{ background: `${color}22`, color }}>
@@ -612,13 +612,13 @@ function VSPlayerCard({ player, color, side }: { player: Player | null; color: s
 
   return (
     <div className={cn(
-      'flex-1 flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all',
-      side === 'right' && 'flex-row-reverse',
+      'flex-1 flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border transition-all',
+      side === 'left' && 'flex-row-reverse',
     )}
       style={{ borderColor: `${color}30`, background: `${color}08` }}>
       {player.avatar_url ? (
         <img src={player.avatar_url}
-          className="w-16 h-16 rounded-xl object-cover border-2 flex-shrink-0"
+          className="w-16 h-16 rounded-xl object-cover object-[center_20%] border-2 flex-shrink-0"
           style={{ borderColor: `${color}50` }}
         />
       ) : (
@@ -627,15 +627,18 @@ function VSPlayerCard({ player, color, side }: { player: Player | null; color: s
           {player.full_name[0]}
         </div>
       )}
-      <div className={cn('min-w-0', side === 'right' && 'text-right')}>
-        <p className="text-lg font-black text-white uppercase italic tracking-tight truncate leading-tight">
+      <div className={cn(
+        'min-w-0 flex-1 flex flex-col',
+        side === 'left' ? 'text-right items-end pr-6 md:pr-8' : 'text-left items-start pl-6 md:pl-8',
+      )}>
+        <p className="max-w-full text-base md:text-lg font-black text-white uppercase italic tracking-tight leading-tight whitespace-normal break-words">
           {player.full_name}
         </p>
         <p className="text-[10px] font-black uppercase tracking-widest mt-0.5" style={{ color }}>
           {player.main_position}
         </p>
         {player.club_name && (
-          <p className="text-[10px] text-slate-500 font-semibold truncate">
+          <p className="max-w-full text-[10px] text-slate-500 font-semibold leading-tight whitespace-normal break-words">
             {player.club_name}
             {player.calculated_age ? ` · ${player.calculated_age} años` : ''}
           </p>
@@ -697,18 +700,19 @@ export function Comparativas({ players }: ComparativasProps) {
   const [idA, setIdA] = useState<string>(players[0]?.id ?? '');
   const [idB, setIdB] = useState<string>(players[1]?.id ?? '');
   const [tab, setTab] = useState<Tab>('duelo');
-  const [filterCat, setFilterCat] = useState<string>('');
+  const [filterCats, setFilterCats] = useState<string[]>([]);
+  const getPlayerCategory = (player: Player) => calculateCategory(player.birth_year, player.birth_date);
 
   // Categorías únicas extraídas de los jugadores
   const categories = useMemo(() => {
-    const cats = [...new Set(players.map(p => p.category_id).filter(Boolean))].sort();
+    const cats = sortCategories([...new Set(players.map(getPlayerCategory).filter(Boolean))]);
     return cats as string[];
   }, [players]);
 
   // Jugadores filtrados por categoría
   const filteredPlayers = useMemo(
-    () => filterCat ? players.filter(p => p.category_id === filterCat) : players,
-    [players, filterCat],
+    () => filterCats.length ? players.filter(p => filterCats.includes(getPlayerCategory(p))) : players,
+    [players, filterCats],
   );
 
   const playerA = useMemo(() => players.find(p => p.id === idA) ?? null, [players, idA]);
@@ -716,8 +720,15 @@ export function Comparativas({ players }: ComparativasProps) {
 
   // Si el jugador seleccionado no está en la categoría filtrada, deseleccionar
   const handleFilterCat = (cat: string) => {
-    setFilterCat(cat);
-    const fp = cat ? players.filter(p => p.category_id === cat) : players;
+    const nextCats = !cat
+      ? []
+      : filterCats.includes(cat)
+        ? filterCats.filter(c => c !== cat)
+        : filterCats.length < 2
+          ? [...filterCats, cat]
+          : [filterCats[1], cat];
+    setFilterCats(nextCats);
+    const fp = nextCats.length ? players.filter(p => nextCats.includes(getPlayerCategory(p))) : players;
     if (idA && !fp.find(p => p.id === idA)) setIdA('');
     if (idB && !fp.find(p => p.id === idB)) setIdB('');
   };
@@ -755,7 +766,7 @@ export function Comparativas({ players }: ComparativasProps) {
                 onClick={() => handleFilterCat('')}
                 className={cn(
                   'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all',
-                  filterCat === ''
+                  filterCats.length === 0
                     ? 'bg-emerald-500 text-slate-950'
                     : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700',
                 )}
@@ -768,7 +779,7 @@ export function Comparativas({ players }: ComparativasProps) {
                   onClick={() => handleFilterCat(cat)}
                   className={cn(
                     'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all',
-                    filterCat === cat
+                    filterCats.includes(cat)
                       ? 'bg-emerald-500 text-slate-950'
                       : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700',
                   )}
@@ -777,9 +788,9 @@ export function Comparativas({ players }: ComparativasProps) {
                 </button>
               ))}
             </div>
-            {filterCat && (
+            {filterCats.length > 0 && (
               <p className="text-[9px] text-slate-600 font-semibold">
-                {filteredPlayers.length} jugador{filteredPlayers.length !== 1 ? 'es' : ''} en <span className="text-emerald-600">{filterCat}</span>
+                {filteredPlayers.length} jugador{filteredPlayers.length !== 1 ? 'es' : ''} en <span className="text-emerald-600">{filterCats.join(' + ')}</span>
               </p>
             )}
           </div>
@@ -836,43 +847,46 @@ export function Comparativas({ players }: ComparativasProps) {
       {/* Tabs */}
       {playerA && playerB && (
         <>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTab('duelo')}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all',
-                tab === 'duelo'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-slate-800 text-slate-400 hover:text-white',
-              )}
-            >
-              <Swords size={13} />
-              Duelo
-            </button>
-            <button
-              onClick={() => setTab('radares')}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all',
-                tab === 'radares'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-slate-800 text-slate-400 hover:text-white',
-              )}
-            >
-              <BarChart2 size={13} />
-              Radares
-            </button>
+          <div className="flex justify-center">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTab('duelo')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all',
+                  tab === 'duelo'
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-slate-800 text-slate-400 hover:text-white',
+                )}
+              >
+                <Swords size={13} />
+                Duelo
+              </button>
+              <button
+                onClick={() => setTab('radares')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all',
+                  tab === 'radares'
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-slate-800 text-slate-400 hover:text-white',
+                )}
+              >
+                <BarChart2 size={13} />
+                Radares
+              </button>
+            </div>
           </div>
 
           {/* Tab: Duelo por atributos */}
           {tab === 'duelo' && (
             <div className="space-y-4">
               {/* Leyenda */}
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                <div className="flex items-center justify-end gap-2 pr-4">
                   <div className="w-8 h-2.5 rounded-full" style={{ background: COLOR_A.stroke }} />
                   <span className="text-[11px] font-black text-slate-300">{playerA.full_name}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="w-14" />
+                <div className="flex items-center justify-start gap-2 pl-4">
                   <div className="w-8 h-2.5 rounded-full" style={{ background: COLOR_B.stroke }} />
                   <span className="text-[11px] font-black text-slate-300">{playerB.full_name}</span>
                 </div>
@@ -902,12 +916,13 @@ export function Comparativas({ players }: ComparativasProps) {
           {tab === 'radares' && (
             <div className="space-y-4">
               {/* Leyenda */}
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                <div className="flex items-center justify-end gap-2 pr-4">
                   <div className="w-8 h-[3px] rounded-full" style={{ background: COLOR_A.stroke }} />
                   <span className="text-[11px] font-black text-slate-300">{playerA.full_name}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="w-14" />
+                <div className="flex items-center justify-start gap-2 pl-4">
                   <div className="w-8 h-0 border-t-2 border-dashed" style={{ borderColor: COLOR_B.stroke }} />
                   <span className="text-[11px] font-black text-slate-300">{playerB.full_name}</span>
                 </div>

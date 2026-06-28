@@ -71,7 +71,7 @@ export const MOCK_PLAYERS: Player[] = [
     full_name: 'Juan Pérez',
     birth_year: 2005,
     calculated_age: 20,
-    category_id: 'cat-2',
+    category_id: 'cat-senior',
     current_team_id: 'team-1',
     club_name: 'Real Madrid Castilla',
     main_position: 'DC',

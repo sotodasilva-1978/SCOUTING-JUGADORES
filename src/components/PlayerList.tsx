@@ -1,6 +1,6 @@
 import { Search, Filter, Plus, Eye, FileText, Trash2, ChevronLeft, ChevronRight, User, X, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, sortPositions, POSITION_ORDER } from '../lib/utils';
+import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, sortCategories, sortPositions, POSITION_ORDER } from '../lib/utils';
 import { memo, useMemo, useState, ReactNode } from 'react';
 import { Player } from '../types';
 
@@ -30,7 +30,7 @@ export const PlayerList = memo(function PlayerList({
 
   // Extract unique values for filters
   const positions = useMemo(() => sortPositions(['ALL', ...new Set(players.filter(Boolean).map(p => p.main_position))]), [players]);
-  const categories = useMemo(() => ['ALL', ...new Set(players.filter(Boolean).map(p => calculateCategory(p.birth_year)))].sort(), [players]);
+  const categories = useMemo(() => sortCategories(['ALL', ...new Set(players.filter(Boolean).map(p => calculateCategory(p.birth_year, p.birth_date)))]), [players]);
   const clubs = useMemo(() => ['ALL', ...new Set(players.filter(Boolean).map(p => p.club_name).filter(Boolean) as string[])].sort(), [players]);
   const statuses = useMemo(() => ['ALL', 'NEW', 'PRIORITY', 'TRACKING', 'DISCARDED', 'OBSERVED', 'INTERESTING', 'VERY_INTERESTING', 'CONTACTED', 'ON_TRIAL', 'SIGNED', 'NOT_AVAILABLE'], []);
 
@@ -45,7 +45,7 @@ export const PlayerList = memo(function PlayerList({
                            pPosition.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
       const matchesPos = posFilter === 'ALL' || p.main_position === posFilter;
-      const matchesCat = catFilter === 'ALL' || calculateCategory(p.birth_year) === catFilter;
+      const matchesCat = catFilter === 'ALL' || calculateCategory(p.birth_year, p.birth_date) === catFilter;
       const matchesClub = clubFilter === 'ALL' || p.club_name === clubFilter;
       
       let matchesRating = true;
@@ -69,8 +69,8 @@ export const PlayerList = memo(function PlayerList({
           aValue = a.birth_year || 0;
           bValue = b.birth_year || 0;
         } else if (sortConfig.key === 'category') {
-          aValue = calculateCategory(a.birth_year);
-          bValue = calculateCategory(b.birth_year);
+          aValue = calculateCategory(a.birth_year, a.birth_date);
+          bValue = calculateCategory(b.birth_year, b.birth_date);
         } else if (sortConfig.key === 'main_position') {
           aValue = POSITION_ORDER[a.main_position] || 99;
           bValue = POSITION_ORDER[b.main_position] || 99;
@@ -338,7 +338,7 @@ export const PlayerList = memo(function PlayerList({
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 scale-y-0 group-hover:scale-y-100 transition-transform origin-center rounded-r-full" />
                     <div className="flex items-center gap-4">
                        <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 overflow-hidden shadow-inner group-hover:border-emerald-500/30 transition-colors">
-                         {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover" /> : <User className="w-6 h-6 opacity-40" />}
+                         {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%]" /> : <User className="w-6 h-6 opacity-40" />}
                        </div>
                        <div>
                          <p className="font-black text-slate-100 group-hover:text-emerald-400 transition-colors tracking-tight">{player.full_name}</p>
@@ -354,7 +354,7 @@ export const PlayerList = memo(function PlayerList({
                     <p className="text-slate-300 font-bold tracking-tight text-sm">{player.club_name || 'Sin equipo'}</p>
                   </td>
                   <td className="py-5 px-4">
-                    <p className="text-[9px] text-emerald-500 uppercase font-black tracking-[0.1em]">{calculateCategory(player.birth_year)}</p>
+                    <p className="text-[9px] text-emerald-500 uppercase font-black tracking-[0.1em]">{calculateCategory(player.birth_year, player.birth_date)}</p>
                   </td>
                   <td className="py-5 px-4">
                     <span className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 group-hover:text-emerald-400 group-hover:border-emerald-500/20 transition-all shadow-sm">
@@ -422,12 +422,12 @@ export const PlayerList = memo(function PlayerList({
                 <div className="flex items-center justify-between relative">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 shadow-inner group-active:border-emerald-500/50 transition-colors">
-                      {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover rounded-2xl" /> : <User className="w-8 h-8 opacity-20" />}
+                      {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%] rounded-2xl" /> : <User className="w-8 h-8 opacity-20" />}
                     </div>
                     <div>
                       <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors truncate max-w-[160px] sm:max-w-none">{player.full_name}</h4>
                       <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1 truncate max-w-[160px] sm:max-w-none">
-                        {player.main_position} · {calculateCategory(player.birth_year)} · {player.birth_year || 'N/R'} ({player.calculated_age}A)
+                        {player.main_position} · {calculateCategory(player.birth_year, player.birth_date)} · {player.birth_year || 'N/R'} ({player.calculated_age}A)
                       </p>
                     </div>
                   </div>

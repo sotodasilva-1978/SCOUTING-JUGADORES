@@ -4,12 +4,12 @@ import {
   History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
   TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
   MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
-  LayoutDashboard, Smartphone, Monitor, Mic
+  LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
-import { useMemo, useState, useRef, ChangeEvent, FormEvent } from 'react';
+import { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { uploadPlayerPhoto } from '../lib/supabase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -17,6 +17,20 @@ import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, 
   Radar, BarChart, Bar, XAxis, YAxis, Cell, Tooltip 
 } from 'recharts';
+
+function parseVideoEmbed(url: string): { embedUrl: string | null; platform: 'youtube' | 'vimeo' | 'other'; videoId: string | null } {
+  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return { embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?rel=0`, platform: 'youtube', videoId: ytMatch[1] };
+  const vimeoMatch = url.match(/(?:vimeo\.com\/(?:video\/)?|player\.vimeo\.com\/video\/)(\d+)/);
+  if (vimeoMatch) return { embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?dnt=1`, platform: 'vimeo', videoId: vimeoMatch[1] };
+  return { embedUrl: null, platform: 'other', videoId: null };
+}
+
+function getVideoThumbnail(url: string): string | null {
+  const { platform, videoId } = parseVideoEmbed(url);
+  if (platform === 'youtube' && videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  return null;
+}
 
 const RATING_CATEGORIES = {
   fisicas: [
@@ -216,7 +230,8 @@ interface PlayerDetailProps {
   onDelete: () => void;
   onEdit: () => void;
   onCreateReport: (mode: 'RAPID' | 'COMPLETE') => void;
-  onAddVideo: (video: { url: string; title: string }) => void;
+  onAddVideo: (video: { url: string; title: string; description?: string; is_key?: boolean }) => void;
+  onDeleteVideo?: (videoId: string) => void;
   onUpdatePlayer?: (player: Player) => void;
   initialTab?: string;
   userRole?: string;
@@ -263,6 +278,7 @@ export function PlayerDetail({
   onEdit, 
   onCreateReport, 
   onAddVideo,
+  onDeleteVideo,
   onUpdatePlayer,
   initialTab = 'resumen'
 }: PlayerDetailProps) {
@@ -271,10 +287,19 @@ export function PlayerDetail({
   const [formData, setFormData] = useState<Partial<Player>>({ ...player });
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [lightboxVideo, setLightboxVideo] = useState<VideoType | null>(null);
+  const videoPlayerRef = useRef<HTMLDivElement>(null);
+  const [newVideoUrl, setNewVideoUrl] = useState('');
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [newVideoDesc, setNewVideoDesc] = useState('');
+  const [newVideoIsKey, setNewVideoIsKey] = useState(false);
+  const [videoUrlError, setVideoUrlError] = useState('');
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'compressing' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadError, setUploadError] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -603,7 +628,7 @@ export function PlayerDetail({
                 title="Haz clic para cambiar la foto"
               >
                 {player.avatar_url ? (
-                  <img src={player.avatar_url} alt={player.full_name} className="w-full h-full object-cover" />
+                  <img src={player.avatar_url} alt={player.full_name} className="w-full h-full object-cover object-[center_20%]" />
                 ) : (
                   <span>{player.full_name[0]}</span>
                 )}
@@ -624,7 +649,7 @@ export function PlayerDetail({
               <p className="text-xs sm:text-sm font-bold text-slate-400 truncate">
                 <span className="text-emerald-500">{player.club_name}</span>
                 <span className="mx-2 text-slate-700">·</span>
-                <span className="uppercase text-slate-300">{calculateCategory(player.birth_year)}</span>
+                <span className="uppercase text-slate-300">{calculateCategory(player.birth_year, player.birth_date)}</span>
                 <span className="mx-2 text-slate-700">·</span>
                 <span>{player.birth_year} ({player.calculated_age} años)</span>
               </p>
@@ -666,7 +691,7 @@ export function PlayerDetail({
              <button onClick={() => onCreateReport('COMPLETE')} title="Informe Detallado posteriori" className="bg-blue-600 text-white px-3 py-2.5 rounded-xl text-[9px] font-black hover:bg-blue-500 transition-all flex items-center gap-1.5 shadow-lg shadow-blue-900/20">
                 <Monitor size={14} /> MÉTODO
              </button>
-             <button onClick={() => onAddVideo({url: '', title: ''})} className="bg-slate-900 border border-slate-800 text-purple-400 px-4 py-2.5 rounded-xl text-[10px] font-black hover:bg-purple-400/10 transition-all">
+             <button onClick={() => setShowAddVideoModal(true)} className="bg-slate-900 border border-slate-800 text-purple-400 px-4 py-2.5 rounded-xl text-[10px] font-black hover:bg-purple-400/10 transition-all">
                 VÍDEO
              </button>
              <input 
@@ -819,7 +844,7 @@ export function PlayerDetail({
                       <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 flex flex-col md:flex-row gap-8 items-center md:items-start shadow-xl backdrop-blur-sm">
                          <div className="w-48 h-48 rounded-[2rem] bg-slate-800/50 border border-slate-700/50 overflow-hidden shrink-0 shadow-2xl group relative">
                             {player.avatar_url ? (
-                              <img src={player.avatar_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                              <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%] group-hover:scale-110 transition-transform duration-700" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-6xl font-black text-slate-700">{player.full_name[0]}</div>
                             )}
@@ -1261,7 +1286,7 @@ export function PlayerDetail({
                       <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 space-y-3 relative group">
                         <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Cat. Federativa (Auto)</label>
                         <p className="text-sm font-black text-emerald-400">
-                          {calculateCategory(formData.birth_year || 0)}
+                          {calculateCategory(formData.birth_year || 0, formData.birth_date as string | undefined)}
                         </p>
                       </div>
                       {renderDataField('Liga / Competición', 'league')}
@@ -1612,21 +1637,123 @@ export function PlayerDetail({
             )}
 
             {activeTab === 'multimedia' && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                {videos.map(v => (
-                  <div key={v.id} className="bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 group hover:border-purple-500/30 transition-all">
-                    <div className="aspect-video bg-slate-950 flex items-center justify-center relative">
-                      <Video size={40} className="text-slate-800 group-hover:text-purple-500/50 transition-all" />
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-[10px] font-black text-white border border-white/20">REPRODUCIR</button>
+              <div className="space-y-4">
+
+                {/* PLAYER PRINCIPAL */}
+                {lightboxVideo && (() => {
+                  const { embedUrl } = parseVideoEmbed(lightboxVideo.url);
+                  return (
+                    <div ref={videoPlayerRef} style={{ position: 'sticky', top: 0, zIndex: 50 }} className="rounded-2xl overflow-hidden bg-black shadow-2xl">
+                      <div style={{ position: 'relative', paddingTop: '56.25%', overflow: 'hidden' }}
+                        dangerouslySetInnerHTML={{ __html: `<iframe src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;border:none"></iframe>` }}
+                      />
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900">
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-white truncate">{lightboxVideo.title}</p>
+                          {lightboxVideo.description && <p className="text-[10px] text-slate-500 truncate mt-0.5">{lightboxVideo.description}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <a href={lightboxVideo.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"><ExternalLink size={13} /></a>
+                          <button onClick={() => setLightboxVideo(null)} className="p-2 bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"><XCircle size={13} /></button>
+                        </div>
                       </div>
                     </div>
-                    <div className="p-4 bg-slate-900/80">
-                      <p className="text-xs font-bold text-slate-200 truncate">{v.title}</p>
-                      <p className="text-[9px] font-black text-slate-500 mt-1 uppercase tracking-widest">Clip de video</p>
+                  );
+                })()}
+
+                {/* CARRUSEL NETFLIX */}
+                {videos.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                    <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center text-purple-500">
+                      <Video size={28} />
+                    </div>
+                    <p className="text-sm font-black text-white uppercase tracking-widest">Sin vídeos</p>
+                    <button onClick={() => setShowAddVideoModal(true)}
+                      className="px-6 py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500/20 transition-all">
+                      + AÑADIR VÍDEO
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{videos.length} vídeo{videos.length !== 1 ? 's' : ''}</p>
+                      <button onClick={() => setShowAddVideoModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all">
+                        <Plus size={10} /> Añadir
+                      </button>
+                    </div>
+
+                    {/* Scroll horizontal tipo Netflix */}
+                    <div className="flex gap-3 overflow-x-auto pb-3" style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      {videos.map(v => {
+                        const { platform } = parseVideoEmbed(v.url);
+                        const thumbnail = getVideoThumbnail(v.url);
+                        const isActive = lightboxVideo?.id === v.id;
+                        return (
+                          <div
+                            key={v.id}
+                            className={cn("relative flex-shrink-0 rounded-2xl overflow-hidden cursor-pointer group transition-all", isActive ? "ring-2 ring-purple-500" : "ring-1 ring-slate-700 hover:ring-purple-500/50")}
+                            style={{ width: 200, scrollSnapAlign: 'start' }}
+                            onClick={() => setLightboxVideo(isActive ? null : v)}
+                          >
+                            {/* Thumbnail */}
+                            <div className="relative bg-slate-900" style={{ height: 112 }}>
+                              {thumbnail ? (
+                                <img src={thumbnail} alt={v.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                                  <Video size={24} className="text-slate-600" />
+                                </div>
+                              )}
+                              <div className={cn("absolute inset-0 flex items-center justify-center transition-all", isActive ? "bg-purple-900/40" : "bg-black/30 group-hover:bg-black/10")}>
+                                <div className={cn("w-10 h-10 rounded-full flex items-center justify-center border transition-all", isActive ? "bg-purple-500 border-purple-400 scale-110" : "bg-white/20 border-white/30 group-hover:scale-110 group-hover:bg-white/30")}>
+                                  <Play size={14} className="text-white ml-0.5" fill="white" />
+                                </div>
+                              </div>
+                              {onDeleteVideo && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); onDeleteVideo(v.id); }}
+                                  className="absolute top-1.5 right-1.5 p-1.5 bg-rose-500/90 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
+                              {v.is_key && (
+                                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-500 rounded text-[8px] font-black text-black uppercase">CLAVE</span>
+                              )}
+                            </div>
+                            {/* Info */}
+                            <div className="px-3 py-2 bg-slate-900">
+                              <p className="text-[11px] font-bold text-slate-200 truncate">{v.title}</p>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className={cn("text-[8px] font-black uppercase tracking-widest",
+                                  platform === 'youtube' ? 'text-red-400' : platform === 'vimeo' ? 'text-blue-400' : 'text-slate-500'
+                                )}>{platform === 'youtube' ? 'YouTube' : platform === 'vimeo' ? 'Vimeo' : 'Externo'}</span>
+                                <a href={v.url} target="_blank" rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="text-slate-600 hover:text-white transition-all">
+                                  <ExternalLink size={10} />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Botón añadir al final del carrusel */}
+                      <div
+                        className="flex-shrink-0 rounded-2xl border border-dashed border-slate-700 hover:border-purple-500/50 bg-slate-900/50 hover:bg-purple-500/5 cursor-pointer flex flex-col items-center justify-center gap-2 transition-all group/add"
+                        style={{ width: 200, height: 160 }}
+                        onClick={() => setShowAddVideoModal(true)}
+                      >
+                        <div className="w-10 h-10 bg-slate-800 group-hover/add:bg-purple-500/20 rounded-xl flex items-center justify-center text-slate-600 group-hover/add:text-purple-400 transition-all">
+                          <Plus size={20} />
+                        </div>
+                        <span className="text-[9px] font-black text-slate-600 group-hover/add:text-purple-400 uppercase tracking-widest transition-all">Añadir vídeo</span>
+                      </div>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
 
@@ -1717,6 +1844,114 @@ export function PlayerDetail({
           </motion.div>
         </AnimatePresence>
       </div>
+
+
+      {/* MODAL AÑADIR VÍDEO */}
+      {showAddVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-widest">Añadir Vídeo</h3>
+                <p className="text-slate-500 text-xs mt-1 font-bold">YouTube · Vimeo · Enlace externo</p>
+              </div>
+              <button
+                onClick={() => { setShowAddVideoModal(false); setNewVideoUrl(''); setNewVideoTitle(''); setNewVideoDesc(''); setVideoUrlError(''); }}
+                className="p-2 bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            {/* Preview embed en tiempo real */}
+            {(() => {
+              const { embedUrl } = parseVideoEmbed(newVideoUrl);
+              if (!embedUrl) return null;
+              return (
+                <div className="aspect-video bg-slate-950 rounded-2xl overflow-hidden mb-4 border border-slate-800">
+                  <iframe src={embedUrl} className="w-full h-full" allowFullScreen title="Preview" />
+                </div>
+              );
+            })()}
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">URL del Vídeo *</label>
+                <input
+                  type="url"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={newVideoUrl}
+                  onChange={e => { setNewVideoUrl(e.target.value); setVideoUrlError(''); }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50 font-mono"
+                />
+                {videoUrlError && <p className="text-rose-400 text-[10px] mt-1 font-bold">{videoUrlError}</p>}
+                {newVideoUrl && (() => {
+                  const { platform } = parseVideoEmbed(newVideoUrl);
+                  if (platform === 'youtube') return <p className="text-red-400 text-[10px] mt-1 font-black">✓ YouTube detectado</p>;
+                  if (platform === 'vimeo') return <p className="text-blue-400 text-[10px] mt-1 font-black">✓ Vimeo detectado</p>;
+                  return <p className="text-slate-500 text-[10px] mt-1 font-bold">Enlace externo — se mostrará como link</p>;
+                })()}
+              </div>
+
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Título</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Hat-trick vs Real Madrid (10/03/2025)"
+                  value={newVideoTitle}
+                  onChange={e => setNewVideoTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Descripción (opcional)</label>
+                <textarea
+                  placeholder="Acciones relevantes, minutos clave..."
+                  value={newVideoDesc}
+                  onChange={e => setNewVideoDesc(e.target.value)}
+                  rows={2}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50 resize-none"
+                />
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  onClick={() => setNewVideoIsKey(!newVideoIsKey)}
+                  className={cn("w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shrink-0", newVideoIsKey ? "bg-amber-500 border-amber-500" : "border-slate-700 hover:border-amber-500/50")}
+                >
+                  {newVideoIsKey && <CheckCircle2 size={12} className="text-white" />}
+                </div>
+                <span className="text-xs font-bold text-slate-300">Marcar como vídeo clave</span>
+              </label>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowAddVideoModal(false); setNewVideoUrl(''); setNewVideoTitle(''); setNewVideoDesc(''); setNewVideoIsKey(false); setVideoUrlError(''); }}
+                className="flex-1 py-3 bg-slate-800 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!newVideoUrl.trim()) { setVideoUrlError('Introduce una URL válida'); return; }
+                  onAddVideo({ url: newVideoUrl.trim(), title: newVideoTitle.trim() || 'Vídeo Scouting', description: newVideoDesc.trim() || undefined, is_key: newVideoIsKey });
+                  setShowAddVideoModal(false);
+                  setNewVideoUrl('');
+                  setNewVideoTitle('');
+                  setNewVideoDesc('');
+                  setNewVideoIsKey(false);
+                  setVideoUrlError('');
+                }}
+                className="flex-1 py-3 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/30"
+              >
+                Añadir Vídeo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -79,30 +79,74 @@ export function sortPositions(positions: string[]): string[] {
   });
 }
 
+const CATEGORY_ORDER: Record<string, number> = {
+  'SENIOR': 1,
+  'JUVENIL': 2,
+  'CADETE': 3,
+  'INFANTIL': 4,
+  'ALEVÍN': 5,
+  'ALEVIN': 5,
+  'BENJAMÍN': 6,
+  'BENJAMIN': 6,
+  'PRE-BENJAMÍN': 7,
+  'PRE-BENJAMIN': 7,
+};
+
+export function sortCategories(categories: string[]): string[] {
+  return [...categories].sort((a, b) => {
+    if (a === 'ALL' || a === 'TODAS') return -1;
+    if (b === 'ALL' || b === 'TODAS') return 1;
+    const priorityA = CATEGORY_ORDER[a.toUpperCase()] || 99;
+    const priorityB = CATEGORY_ORDER[b.toUpperCase()] || 99;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    return a.localeCompare(b, 'es');
+  });
+}
+
 /**
  * Calcula la edad exacta teniendo en cuenta si el cumpleaños ya pasó este año.
  * - Si se tiene birth_date (YYYY-MM-DD) usa día y mes exactos.
  * - Si solo hay birth_year usa la diferencia de años (aproximación ±0).
  */
-export function computeAge(birthDate?: string | null, birthYear?: number | null): number | undefined {
-  const today = new Date();
+export function resolveBirthYear(birthDate?: string | null, birthYear?: number | null): number | undefined {
+  const numericBirthYear = typeof birthYear === 'number' && Number.isFinite(birthYear) ? birthYear : undefined;
 
   if (birthDate) {
     const bd = new Date(birthDate);
-    if (isNaN(bd.getTime())) return birthYear ? today.getFullYear() - birthYear : undefined;
+    if (!isNaN(bd.getTime())) {
+      const dateYear = bd.getFullYear();
+      if (numericBirthYear && dateYear !== numericBirthYear) return numericBirthYear;
+      return numericBirthYear ?? dateYear;
+    }
+  }
+
+  return numericBirthYear;
+}
+
+export function computeAge(birthDate?: string | null, birthYear?: number | null): number | undefined {
+  const today = new Date();
+  const resolvedBirthYear = resolveBirthYear(birthDate, birthYear);
+
+  if (birthDate) {
+    const bd = new Date(birthDate);
+    if (isNaN(bd.getTime())) return resolvedBirthYear ? today.getFullYear() - resolvedBirthYear : undefined;
+    if (resolvedBirthYear && bd.getFullYear() !== resolvedBirthYear) {
+      return today.getFullYear() - resolvedBirthYear;
+    }
     let age = today.getFullYear() - bd.getFullYear();
     const monthDiff = today.getMonth() - bd.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bd.getDate())) age--;
     return age;
   }
 
-  if (birthYear) return today.getFullYear() - birthYear;
+  if (resolvedBirthYear) return today.getFullYear() - resolvedBirthYear;
   return undefined;
 }
 
-export function calculateCategory(birthYear: number): string {
-  if (!birthYear) return 'SIN REGISTRO';
-  const age = new Date().getFullYear() - birthYear;
+export function calculateCategory(birthYear?: number | null, birthDate?: string | null): string {
+  const resolvedBirthYear = resolveBirthYear(birthDate, birthYear);
+  if (!resolvedBirthYear) return 'SIN REGISTRO';
+  const age = new Date().getFullYear() - resolvedBirthYear;
   if (age >= 19) return 'SENIOR';
   if (age >= 16) return 'JUVENIL';
   if (age >= 14) return 'CADETE';

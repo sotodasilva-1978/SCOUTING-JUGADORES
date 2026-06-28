@@ -102,7 +102,7 @@ export function ClubList({ onSelectClub, onViewPlayers }: {
         if (!p.club_name) continue;
         if (!clubMap.has(p.club_name)) clubMap.set(p.club_name, new Map());
         const cats = clubMap.get(p.club_name)!;
-        const cat = calculateCategory(p.birth_year);
+        const cat = calculateCategory(p.birth_year, (p as any).birth_date);
         cats.set(cat, (cats.get(cat) || 0) + 1);
       }
 
