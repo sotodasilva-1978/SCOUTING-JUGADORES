@@ -697,7 +697,7 @@ export default function App() {
 
   const handleSaveMatch = async (matchData: any) => {
     const newMatch: Match = {
-      id: `m-${Date.now()}`,
+      id: crypto.randomUUID(),
       date: matchData.date || new Date().toISOString(),
       home_team: matchData.home_team,
       away_team: matchData.away_team,
@@ -708,10 +708,13 @@ export default function App() {
       created_at: new Date().toISOString(),
     };
 
-    setMatches([newMatch, ...matches]);
-    
-    // Supabase
-    await supabase.from('matches').insert([newMatch]);
+    const { data: inserted, error } = await supabase.from('matches').insert([newMatch]).select();
+    if (error) {
+      console.error('Error guardando partido:', error);
+      alert('Error al guardar el partido: ' + error.message);
+      return;
+    }
+    setMatches(prev => [inserted?.[0] ?? newMatch, ...prev]);
   };
 
   const handleMergeReports = async (reportIds: string[]) => {
