@@ -402,7 +402,7 @@ export default function App() {
   // Helper to clean report data for Supabase
   const prepareReportForDB = async (report: Report) => {
     const allowedFields = [
-      'id', 'player_id', 'match_id', 'observer_id', 'observer_role', 'report_date', 'category_id',
+      'id', 'player_id', 'match_id', 'observer_id', 'report_date', 'category_id',
       'position_played', 'minutes_observed', 'match_context', 'technical_comment', 
       'tactical_comment', 'physical_comment', 'mental_comment', 'strengths', 
       'weaknesses', 'key_actions', 'doubts', 'recommendation', 'next_step', 
