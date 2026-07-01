@@ -1080,6 +1080,7 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [printType, setPrintType] = useState<'barras' | 'radares'>('barras');
   const [printReady, setPrintReady] = useState(false);
+  const [gkOverride, setGkOverride] = useState(false);
 
   const canPrint = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID'].includes(userRole || '');
 
@@ -1109,7 +1110,14 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
 
   const playerA = useMemo(() => players.find(p => p.id === idA) ?? null, [players, idA]);
   const playerB = useMemo(() => players.find(p => p.id === idB) ?? null, [players, idB]);
-  const isGK = playerA?.main_position === 'POR' && playerB?.main_position === 'POR';
+
+  const isGKPlayer = (p: Player | null) => {
+    const pos = (p?.main_position || '').toUpperCase().trim();
+    return pos === 'POR' || pos === 'GK' || pos.startsWith('POR');
+  };
+  const autoIsGK = isGKPlayer(playerA) && isGKPlayer(playerB);
+  const eitherIsGK = isGKPlayer(playerA) || isGKPlayer(playerB);
+  const isGK = autoIsGK || gkOverride;
 
   // Si el jugador seleccionado no está en la categoría filtrada, deseleccionar
   const handleFilterCat = (cat: string) => {
@@ -1251,7 +1259,7 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
       {/* Tabs */}
       {playerA && playerB && (
         <>
-          <div className="flex justify-center">
+          <div className="flex flex-wrap justify-center items-center gap-3">
             <div className="flex gap-2">
               <button
                 onClick={() => setTab('duelo')}
@@ -1278,6 +1286,40 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
                 Radares
               </button>
             </div>
+
+            {/* Botón portero: auto-activo si ambos son POR, manual si no */}
+            {(eitherIsGK || gkOverride) && (
+              <button
+                onClick={() => !autoIsGK && setGkOverride(v => !v)}
+                title={autoIsGK ? 'Ambos jugadores son porteros — análisis GK activado' : (gkOverride ? 'Desactivar análisis de portero' : 'Activar análisis de portero')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border',
+                  isGK
+                    ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 cursor-default'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400',
+                  autoIsGK && 'cursor-default',
+                )}
+              >
+                <span className={cn('w-2 h-2 rounded-full', isGK ? 'bg-cyan-400 animate-pulse' : 'bg-slate-600')} />
+                {autoIsGK ? '● Porteros detectados' : (gkOverride ? '● Modo portero ON' : 'Activar portero')}
+              </button>
+            )}
+            {/* Botón visible aunque ninguno sea GK, para activación manual */}
+            {!eitherIsGK && (
+              <button
+                onClick={() => setGkOverride(v => !v)}
+                title={gkOverride ? 'Desactivar análisis de portero' : 'Activar análisis específico de portero'}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border',
+                  gkOverride
+                    ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400'
+                    : 'bg-slate-800/50 border-slate-700/50 text-slate-600 hover:border-cyan-500/30 hover:text-slate-400',
+                )}
+              >
+                <span className={cn('w-2 h-2 rounded-full', gkOverride ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700')} />
+                {gkOverride ? '● Modo portero ON' : 'Modo portero'}
+              </button>
+            )}
           </div>
 
           {/* Tab: Duelo por atributos */}
