@@ -15,6 +15,7 @@ interface DashboardProps {
   onSelectPlayer: (player: Player) => void;
   onSelectMatch: (match: Match) => void;
   onTabChange: (tab: string) => void;
+  onNavigatePlayers: (statusFilter?: string) => void;
   players: Player[];
   matches: Match[];
   reports: Report[];
@@ -26,11 +27,11 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
     const dist = { strikers: 0, midfielders: 0, defenders: 0, keepers: 0 };
     players.forEach(p => {
       if (!p) return;
-      const pos = (p.main_position || '').toUpperCase();
-      if (['ST', 'CF', 'LW', 'RW', 'EXT', 'DEL'].some(m => pos.includes(m))) dist.strikers++;
-      else if (['CDM', 'CM', 'CAM', 'RM', 'LM', 'MC', 'MCO', 'MCD'].some(m => pos.includes(m))) dist.midfielders++;
-      else if (['CB', 'LB', 'RB', 'LWB', 'RWB', 'DFC', 'DEF'].some(m => pos.includes(m))) dist.defenders++;
-      else if (['GK', 'POR'].some(m => pos.includes(m))) dist.keepers++;
+      const pos = (p.main_position || '').toUpperCase().trim();
+      if (['GK', 'POR'].some(m => pos === m || pos.includes(m))) dist.keepers++;
+      else if (['CB', 'LB', 'RB', 'LWB', 'RWB', 'DFC', 'DEF', 'LD', 'LI'].some(m => pos === m || pos.includes(m))) dist.defenders++;
+      else if (['CDM', 'CM', 'CAM', 'RM', 'LM', 'MC', 'MCO', 'MCD'].some(m => pos === m || pos.includes(m))) dist.midfielders++;
+      else if (['ST', 'CF', 'LW', 'RW', 'DC', 'SD', 'ED', 'EI', 'EXT', 'DEL'].some(m => pos === m || pos.includes(m))) dist.strikers++;
       else dist.midfielders++;
     });
     return [
@@ -42,41 +43,50 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
   }, [players]);
 
   const categoryDistribution = useMemo(() => {
-    const dist: Record<string, number> = { 
-      'SENIOR': 0, 'JUVENIL': 0, 'CADETE': 0, 
-      'INFANTIL': 0, 'ALEVÍN': 0, 'BENJAMÍN': 0, 'PRE-BENJAMÍN': 0 
+    const dist: Record<string, number> = {
+      'SENIOR': 0, 'JUVENIL': 0, 'CADETE': 0,
+      'INFANTIL': 0, 'ALEVÍN': 0, 'BENJAMÍN': 0, 'PRE-BENJAMÍN': 0, 'SIN REGISTRO': 0, 'DEBUTANTE': 0
     };
     players.forEach(p => {
       if (!p) return;
       const cat = calculateCategory(p.birth_year, p.birth_date);
       if (dist[cat] !== undefined) dist[cat]++;
-      else dist['SENIOR']++;
+      else dist['SIN REGISTRO']++;
     });
+    const alevinesPlus = dist['ALEVÍN'] + dist['BENJAMÍN'] + dist['PRE-BENJAMÍN'] + dist['DEBUTANTE'];
     return [
       { name: 'Senior', value: dist['SENIOR'], color: '#8b5cf6' },
       { name: 'Juvenil', value: dist['JUVENIL'], color: '#ec4899' },
       { name: 'Cadete', value: dist['CADETE'], color: '#06b6d4' },
       { name: 'Infantil', value: dist['INFANTIL'], color: '#f87171' },
-      { name: 'Alevin+', value: dist['ALEVÍN'] + dist['BENJAMÍN'] + dist['PRE-BENJAMÍN'], color: '#fbbf24' }
+      { name: 'Alevin+', value: alevinesPlus, color: '#fbbf24' },
+      ...(dist['SIN REGISTRO'] > 0 ? [{ name: 'Sin edad', value: dist['SIN REGISTRO'], color: '#475569' }] : [])
     ];
   }, [players]);
 
   const statusDistribution = useMemo(() => {
-    const dist = { priority: 0, tracking: 0, interesting: 0, new: 0 };
+    const STATUS_MAP: { keys: string[]; name: string; color: string }[] = [
+      { keys: ['NEW'],                                         name: 'Nuevo',            color: '#64748b' }, // slate-500
+      { keys: ['PENDING_VALIDATION', 'PENDIENTE_VALIDACION'], name: 'Pend. Validación', color: '#f97316' }, // orange-500
+      { keys: ['VALIDATED', 'VALIDADO'],                      name: 'Validado',          color: '#3b82f6' }, // blue-500
+      { keys: ['TRACKING', 'EN_SEGUIMIENTO'],                 name: 'Seguimiento',       color: '#06b6d4' }, // cyan-500
+      { keys: ['INTERESTING', 'INTERESANTE'],                 name: 'Interesante',       color: '#facc15' }, // yellow-400
+      { keys: ['VERY_INTERESTING', 'MUY_INTERESANTE'],        name: 'Muy Interesante',   color: '#8b5cf6' }, // violet-500
+      { keys: ['PRIORITY', 'PRIORIDAD'],                      name: 'Prioridad',         color: '#10b981' }, // emerald-500
+      { keys: ['CONTACTED', 'CONTACTADO'],                    name: 'Contactado',        color: '#ec4899' }, // pink-500
+      { keys: ['ON_TRIAL', 'EN_PRUEBA'],                      name: 'En Prueba',         color: '#f59e0b' }, // amber-500
+      { keys: ['SIGNED', 'FICHADO'],                          name: 'Fichado',           color: '#22c55e' }, // green-500
+      { keys: ['DISCARDED', 'DESCARTADO'],                    name: 'Descartado',        color: '#ef4444' }, // red-500
+    ];
+    const counts = STATUS_MAP.map(s => ({ ...s, value: 0 }));
     players.forEach(p => {
       if (!p) return;
       const s = (p.status || '').toUpperCase();
-      if (s === 'PRIORITY') dist.priority++;
-      else if (s === 'TRACKING') dist.tracking++;
-      else if (s === 'INTERESTING') dist.interesting++;
-      else dist.new++;
+      const found = counts.find(c => c.keys.includes(s));
+      if (found) found.value++;
+      else counts[0].value++; // fallback a Nuevo
     });
-    return [
-      { name: 'Prioridad', value: dist.priority, color: '#10b981' },
-      { name: 'Seguimiento', value: dist.tracking, color: '#3b82f6' },
-      { name: 'Interesante', value: dist.interesting, color: '#8b5cf6' },
-      { name: 'Nuevo', value: dist.new, color: '#64748b' }
-    ];
+    return counts.filter(c => c.value > 0);
   }, [players]);
 
   return (
@@ -171,59 +181,59 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
   );
 });
 
-export const Dashboard = memo(function Dashboard({ 
-  onSelectPlayer, 
+export const Dashboard = memo(function Dashboard({
+  onSelectPlayer,
   onSelectMatch,
   onTabChange,
-  players, 
-  matches, 
-  reports, 
-  videos 
+  onNavigatePlayers,
+  players,
+  matches,
+  reports,
+  videos
 }: DashboardProps) {
-  
+
   const stats = useMemo(() => [
-    { 
-      id: 'total',
-      label: 'Total Players', 
-      value: players.length, 
-      icon: Users, 
-      color: 'text-white', 
-      bgColor: 'bg-emerald-500' 
+    {
+      label: 'Total Players',
+      value: players.length,
+      icon: Users,
+      color: 'text-white',
+      bgColor: 'bg-emerald-500',
+      onClick: () => onNavigatePlayers(),
     },
-    { 
-      id: 'players',
-      label: 'En Seguimiento', 
-      value: players.filter(p => !['DISCARDED'].includes(p.status || '')).length, 
-      valueReal: players.length, 
-      icon: Users, 
-      color: 'text-blue-500', 
-      bgColor: 'bg-blue-500/10' 
+    {
+      label: 'En Seguimiento',
+      value: players.filter(p => !['DISCARDED', 'SIGNED'].includes(p.status || '')).length,
+      icon: Users,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-500/10',
+      onClick: () => onNavigatePlayers('TRACKING'),
     },
-    { 
-      id: 'matches',
-      label: 'Partidos', 
-      value: matches.length, 
-      icon: Calendar, 
-      color: 'text-emerald-500', 
-      bgColor: 'bg-emerald-500/10' 
+    {
+      label: 'Partidos',
+      value: matches.length,
+      icon: Calendar,
+      color: 'text-emerald-500',
+      bgColor: 'bg-emerald-500/10',
+      onClick: () => onTabChange('matches'),
     },
-    { 
-      id: 'reports',
-      label: 'Informes', 
-      value: reports.length, 
-      icon: ClipboardList, 
-      color: 'text-amber-500', 
-      bgColor: 'bg-amber-500/10' 
+    {
+      label: 'Informes',
+      value: reports.length,
+      icon: ClipboardList,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10',
+      onClick: () => onTabChange('reports'),
     },
-    { 
-      id: 'stars',
-      label: 'Prioritarios', 
-      value: players.filter(p => p.status === 'PRIORITY').length, 
-      icon: Star, 
-      color: 'text-purple-500', 
-      bgColor: 'bg-purple-500/10' 
+    {
+      label: 'Prioritarios',
+      value: players.filter(p => p.status === 'PRIORITY' || p.status === 'PRIORIDAD').length,
+      icon: Star,
+      color: 'text-purple-500',
+      bgColor: 'bg-purple-500/10',
+      onClick: () => onNavigatePlayers('PRIORITY'),
     },
-  ], [players, matches, reports]);
+  ], [players, matches, reports, onTabChange, onNavigatePlayers]);
 
   const topPlayers = useMemo(() => 
     [...players]
@@ -272,7 +282,7 @@ export const Dashboard = memo(function Dashboard({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            onClick={() => onTabChange(stat.id === 'stars' ? 'players' : stat.id as any)}
+            onClick={stat.onClick}
             className="bg-slate-900/40 border border-slate-800/80 p-4 md:p-5 rounded-3xl cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between h-32 md:h-48"
           >
             <div className={cn("w-9 h-9 md:w-10 md:h-10 rounded-xl mb-3 md:mb-4 flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
@@ -310,16 +320,22 @@ export const Dashboard = memo(function Dashboard({
                     onClick={() => player && onSelectPlayer(player)}
                     className="group bg-slate-900/40 border border-slate-800/80 p-5 rounded-[2rem] hover:border-amber-500/30 transition-all cursor-pointer relative overflow-hidden active:scale-95 shadow-lg"
                   >
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-amber-500/50 transition-colors flex items-center justify-center font-black text-amber-500 italic">
-                        AS
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 group-hover:border-amber-500/50 transition-colors flex items-center justify-center font-black text-amber-500 italic shrink-0 overflow-hidden">
+                        {player?.avatar_url
+                          ? <img src={player.avatar_url} alt={player.full_name} className="w-full h-full object-cover object-top" />
+                          : 'AS'}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-black text-white italic tracking-tight uppercase truncate">{player?.full_name}</p>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase">{player?.club_name}</p>
+                        <p className="text-[11px] font-black text-white italic tracking-tight uppercase leading-tight">{player?.full_name}</p>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase leading-tight mt-0.5">{player?.club_name}</p>
                       </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 italic leading-relaxed mb-4">"{report.general_notes || report.technical_comment}"</p>
+                    <p className="text-[11px] text-slate-400 line-clamp-3 italic leading-relaxed mb-4">
+                      {report.technical_comment
+                        ? `"${report.technical_comment}"`
+                        : <span className="text-slate-600 not-italic">Sin comentario técnico</span>}
+                    </p>
                     <div className="flex items-center justify-between">
                       <div className="px-2 py-0.5 bg-slate-950 text-[9px] font-black text-amber-500 rounded-lg border border-slate-800 italic">
                         SCORE: {report.match_rating || 'N/A'}
@@ -359,16 +375,16 @@ export const Dashboard = memo(function Dashboard({
                     <ArrowUpRight size={14} className="text-slate-800 group-hover:text-emerald-500 transition-all" />
                   </div>
                   <div className="space-y-1 mb-4">
-                    <p className="text-[11px] font-black text-white italic tracking-tight uppercase truncate">{match.home_team_name || match.home_team}</p>
+                    <p className="text-[11px] font-black text-white italic tracking-tight uppercase leading-tight">{match.home_team}</p>
                     <div className="flex items-center gap-2">
                        <div className="h-px flex-1 bg-slate-800" />
                        <span className="text-[9px] font-black text-slate-800 italic">VS</span>
                        <div className="h-px flex-1 bg-slate-800" />
                     </div>
-                    <p className="text-[11px] font-black text-white italic tracking-tight uppercase truncate">{match.home_team_name || match.away_team}</p>
+                    <p className="text-[11px] font-black text-white italic tracking-tight uppercase leading-tight">{match.away_team}</p>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
-                     <span className="text-[9px] font-black text-slate-600 uppercase italic truncate">{match.stadium || match.venue}</span>
+                  <div className="flex items-start justify-between pt-2 border-t border-slate-800/50 gap-2">
+                     <span className="text-[9px] font-black text-slate-600 uppercase italic leading-tight">{match.venue}</span>
                      <p className="text-[10px] font-black text-slate-100 italic tabular-nums">{match.score || 'VS'}</p>
                   </div>
                 </motion.div>
@@ -385,7 +401,7 @@ export const Dashboard = memo(function Dashboard({
             </div>
             <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-6 space-y-4 shadow-2xl">
               {topPlayers.map((player, i) => (
-                <motion.div 
+                <motion.div
                   key={player.id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -393,15 +409,22 @@ export const Dashboard = memo(function Dashboard({
                   onClick={() => onSelectPlayer(player)}
                   className="flex items-center gap-4 group cursor-pointer p-3 rounded-2xl hover:bg-blue-500/[0.05] transition-all active:scale-95"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-blue-500 text-lg group-hover:border-blue-500/50 transition-colors shadow-inner shrink-0">
-                    AS
+                  {/* Avatar + rating apilados */}
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 group-hover:border-blue-500/50 transition-colors shadow-inner overflow-hidden flex items-center justify-center font-black text-blue-500 text-lg">
+                      {player.avatar_url
+                        ? <img src={player.avatar_url} alt={player.full_name} className="w-full h-full object-cover object-top" />
+                        : 'AS'}
+                    </div>
+                    <span className="text-base font-black text-blue-500 italic tabular-nums leading-none">
+                      {formatRating(player.global_rating || 0)}
+                    </span>
                   </div>
+
+                  {/* Nombre y club con todo el espacio disponible */}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-black text-white italic tracking-tight uppercase truncate">{player.full_name}</h4>
-                    <p className="text-[9px] font-bold text-slate-600 uppercase truncate">{player.main_position} • {player.club_name}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-black text-blue-500 italic tabular-nums shadow-blue-500/20">{formatRating(player.global_rating || 0)}</p>
+                    <h4 className="text-xs font-black text-white italic tracking-tight uppercase leading-tight">{player.full_name}</h4>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase leading-snug mt-1">{player.main_position} · {player.club_name}</p>
                   </div>
                 </motion.div>
               ))}

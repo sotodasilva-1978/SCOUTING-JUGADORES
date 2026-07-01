@@ -5,6 +5,12 @@ import { useState, useRef, useEffect } from 'react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import type { UserRole, Profile } from '../types';
+import {
+  buildRatingWeightsPayload,
+  ClubModelWeights,
+  DEFAULT_CLUB_MODEL_WEIGHTS,
+  mapRatingWeightsToClubModel,
+} from '../lib/clubModel';
 
 
 // ─── Role display config ──────────────────────────────────────────────────────
@@ -567,7 +573,15 @@ function UsersTab({ currentUserRole }: { currentUserRole: UserRole }) {
 }
 
 // ─── Main SettingsPanel ───────────────────────────────────────────────────────
-export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
+export function SettingsPanel({
+  userRole,
+  initialWeights = DEFAULT_CLUB_MODEL_WEIGHTS,
+  onWeightsSaved,
+}: {
+  userRole?: UserRole;
+  initialWeights?: ClubModelWeights;
+  onWeightsSaved?: (weights: ClubModelWeights) => void;
+}) {
   const currentRole: UserRole = userRole ?? 'SCOUT';
   const [activeTab, setActiveTab] = useState('usuarios');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -576,19 +590,49 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
   const [clubId, setClubId] = useState<string | null>(null);
 
   const [weights, setWeights] = useState([
-    { id: 'tecnica', label: 'Técnica', weight: 20 },
-    { id: 'tactica', label: 'Táctica', weight: 20 },
-    { id: 'fisico', label: 'Físico', weight: 15 },
-    { id: 'mentalidad', label: 'Mentalidad', weight: 15 },
-    { id: 'potencial', label: 'Potencial', weight: 20 },
-    { id: 'encaje', label: 'Encaje Club', weight: 10 },
+    { id: 'tecnica', label: 'Técnica', weight: initialWeights.technique },
+    { id: 'tactica', label: 'Táctica', weight: initialWeights.tactics },
+    { id: 'fisico', label: 'Físico', weight: initialWeights.physical },
+    { id: 'mentalidad', label: 'Mentalidad', weight: initialWeights.mentality },
+    { id: 'potencial', label: 'Potencial', weight: initialWeights.potential },
   ]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadSettings();
+    loadSettings().finally(() => {
+      setWeights([
+        { id: 'tecnica', label: 'Técnica', weight: initialWeights.technique },
+        { id: 'tactica', label: 'Táctica', weight: initialWeights.tactics },
+        { id: 'fisico', label: 'Físico', weight: initialWeights.physical },
+        { id: 'mentalidad', label: 'Mentalidad', weight: initialWeights.mentality },
+        { id: 'potencial', label: 'Potencial', weight: initialWeights.potential },
+      ]);
+    });
   }, []);
+
+  useEffect(() => {
+    setWeights([
+      { id: 'tecnica', label: 'TÃ©cnica', weight: initialWeights.technique },
+      { id: 'tactica', label: 'TÃ¡ctica', weight: initialWeights.tactics },
+      { id: 'fisico', label: 'FÃ­sico', weight: initialWeights.physical },
+      { id: 'mentalidad', label: 'Mentalidad', weight: initialWeights.mentality },
+      { id: 'potencial', label: 'Potencial', weight: initialWeights.potential },
+    ]);
+  }, [initialWeights]);
+
+  useEffect(() => {
+    setWeights(prev => {
+      const byId = Object.fromEntries(prev.map(item => [item.id, item.weight]));
+      return [
+        { id: 'tecnica', label: 'Técnica', weight: Number(byId.tecnica ?? initialWeights.technique) },
+        { id: 'tactica', label: 'Táctica', weight: Number(byId.tactica ?? initialWeights.tactics) },
+        { id: 'fisico', label: 'Físico', weight: Number(byId.fisico ?? initialWeights.physical) },
+        { id: 'mentalidad', label: 'Mentalidad', weight: Number(byId.mentalidad ?? initialWeights.mentality) },
+        { id: 'potencial', label: 'Potencial', weight: Number(byId.potencial ?? initialWeights.potential) },
+      ];
+    });
+  }, [initialWeights, clubId]);
 
   const loadSettings = async () => {
     try {
@@ -615,6 +659,14 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
              { id: 'potencial', label: 'Potencial', weight: Number(rw.potential_weight) * 100 },
              { id: 'encaje', label: 'Encaje Club', weight: Number(rw.club_fit_weight) * 100 },
            ]);
+           const mappedWeights = mapRatingWeightsToClubModel(rw);
+           setWeights([
+             { id: 'tecnica', label: 'TÃ©cnica', weight: mappedWeights.technique },
+             { id: 'tactica', label: 'TÃ¡ctica', weight: mappedWeights.tactics },
+             { id: 'fisico', label: 'FÃ­sico', weight: mappedWeights.physical },
+             { id: 'mentalidad', label: 'Mentalidad', weight: mappedWeights.mentality },
+             { id: 'potencial', label: 'Potencial', weight: mappedWeights.potential },
+           ]);
         }
       }
     } catch (err) {
@@ -623,37 +675,52 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
   };
 
   const totalWeight = weights.reduce((sum, item) => sum + item.weight, 0);
-  const isValidTotal = Math.abs(totalWeight - 100) < 0.01;
+  const canSaveWeights = totalWeight > 0;
 
   const handleWeightChange = (id: string, value: number) => {
-    setWeights(prev => prev.map(w => w.id === id ? { ...w, weight: value } : w));
+    const nextValue = Math.max(0, Math.min(value, 100));
+    setWeights(prev => prev.map(w => w.id === id ? { ...w, weight: nextValue } : w));
   };
 
   const handleSaveWeights = async () => {
-    if (!isValidTotal) { alert('El total de los pesos debe ser exactamente 100%'); return; }
+    if (!canSaveWeights) { alert('Debes asignar al menos un peso antes de guardar.'); return; }
     if (!clubId) { alert('No se encontró club para asociar los pesos.'); return; }
     try {
-      const payload = {
-        club_id: clubId,
-        technique_weight: weights[0].weight / 100,
-        tactics_weight: weights[1].weight / 100,
-        physical_weight: weights[2].weight / 100,
-        mentality_weight: weights[3].weight / 100,
-        potential_weight: weights[4].weight / 100,
-        club_fit_weight: weights[5].weight / 100,
-        active: true
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { alert('Sesión expirada. Vuelve a iniciar sesión.'); return; }
+
+      const nextWeights: ClubModelWeights = {
+        technique: weights[0].weight,
+        tactics: weights[1].weight,
+        physical: weights[2].weight,
+        mentality: weights[3].weight,
+        potential: weights[4].weight,
       };
-      const { data: existing } = await supabase.from('rating_weights').select('id').eq('club_id', clubId).maybeSingle();
+      const payload = buildRatingWeightsPayload(clubId, nextWeights);
+
+      const { data: existing } = await supabase
+        .from('rating_weights').select('id').eq('club_id', clubId).maybeSingle();
+
       let error;
       if (existing) {
         ({ error } = await supabase.from('rating_weights').update(payload).eq('id', existing.id));
       } else {
-        ({ error } = await supabase.from('rating_weights').insert([payload]));
+        ({ error } = await supabase.from('rating_weights').insert(payload));
       }
       if (error) throw error;
+      onWeightsSaved?.(nextWeights);
       alert('Pesos de valoración actualizados correctamente.');
     } catch (err: any) {
-      alert('Error al guardar pesos: ' + err.message);
+      const isRLS = err.message?.includes('row-level security') || err.code === '42501';
+      if (isRLS) {
+        alert(
+          'Sin permisos para crear la configuración inicial.\n\n' +
+          'Ve a Supabase → Authentication → Policies → tabla "rating_weights" ' +
+          'y añade una política INSERT para usuarios autenticados (auth.uid() IS NOT NULL).'
+        );
+      } else {
+        alert('Error al guardar pesos: ' + err.message);
+      }
     }
   };
 
@@ -723,15 +790,15 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
           {activeTab === 'ratings' && (
             <div className="space-y-8">
               <div>
-                <h3 className="text-xl font-bold text-slate-100">Pesos de Valoración</h3>
-                <p className="text-sm text-slate-500">Define cómo se calcula la valoración global (Media Ponderada).</p>
+                <h3 className="text-xl font-bold text-slate-100">Modelo de Club</h3>
+                <p className="text-sm text-slate-500">Define la importancia de cada área para calcular el encaje automático con la idea de juego del club.</p>
               </div>
               <div className="space-y-6">
                 {weights.map((item) => (
                   <div key={item.id} className="space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-bold text-slate-300">{item.label}</label>
-                      <span className={cn("text-xs font-black", isValidTotal ? "text-emerald-500" : "text-rose-500")}>
+                      <span className="text-xs font-black text-slate-300">
                         {item.weight}%
                       </span>
                     </div>
@@ -739,6 +806,7 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
                       type="range"
                       min="0"
                       max="100"
+                      step="5"
                       value={item.weight}
                       onChange={(e) => handleWeightChange(item.id, Number(e.target.value))}
                       className="w-full h-2 bg-slate-950 rounded-full border border-slate-800 appearance-none cursor-pointer accent-emerald-500 focus:outline-none"
@@ -749,21 +817,24 @@ export function SettingsPanel({ userRole }: { userRole?: UserRole }) {
               <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-full border transition-colors",
-                  isValidTotal
+                  canSaveWeights
                     ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5"
-                    : "text-rose-500 border-rose-500/20 bg-rose-500/5"
+                    : "text-slate-500 border-slate-700 bg-slate-900/60"
                 )}>
-                  {isValidTotal ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                  {canSaveWeights ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
                   <span className="text-xs font-bold uppercase tracking-widest">
-                    TOTAL: {totalWeight}% {isValidTotal ? '(VÁLIDO)' : '(DEBE SER 100%)'}
+                    TOTAL ASIGNADO: {totalWeight}%
                   </span>
                 </div>
+                <p className="text-xs text-slate-500 text-center sm:text-left sm:flex-1">
+                  El encaje se recalcula automÃ¡ticamente normalizando estos pesos.
+                </p>
                 <button
                   onClick={handleSaveWeights}
-                  disabled={!isValidTotal}
+                  disabled={!canSaveWeights}
                   className={cn(
                     "flex items-center gap-2 py-3 px-6 font-black rounded-xl transition-all shadow-lg active:scale-95",
-                    isValidTotal
+                    canSaveWeights
                       ? "bg-emerald-600 text-slate-900 hover:bg-emerald-500"
                       : "bg-slate-800 text-slate-500 cursor-not-allowed"
                   )}

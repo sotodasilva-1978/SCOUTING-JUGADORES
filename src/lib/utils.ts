@@ -13,19 +13,19 @@ export function formatRating(rating?: number) {
 
 export function getStatusColor(status: string) {
   const colors: Record<string, string> = {
-    'NEW': 'bg-slate-500 text-white',
-    'PENDING_VALIDATION': 'bg-slate-600 text-white',
-    'VALIDATED': 'bg-blue-500 text-white',
-    'TRACKING': 'bg-amber-500 text-white',
-    'OBSERVED': 'bg-cyan-500 text-white',
-    'INTERESTING': 'bg-amber-400 text-slate-900',
-    'VERY_INTERESTING': 'bg-emerald-400 text-slate-900',
-    'PRIORITY': 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20',
-    'CONTACTED': 'bg-purple-500 text-white',
-    'ON_TRIAL': 'bg-purple-600 text-white',
-    'SIGNED': 'bg-green-600 text-white',
-    'DISCARDED': 'bg-rose-500 text-white',
-    'NOT_AVAILABLE': 'bg-slate-400 text-white',
+    'NEW':                'bg-slate-500 text-white',
+    'PENDING_VALIDATION': 'bg-orange-500 text-white',
+    'VALIDATED':          'bg-blue-500 text-white',
+    'TRACKING':           'bg-cyan-500 text-white',
+    'OBSERVED':           'bg-sky-400 text-slate-900',
+    'INTERESTING':        'bg-yellow-400 text-slate-900',
+    'VERY_INTERESTING':   'bg-violet-500 text-white',
+    'PRIORITY':           'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20',
+    'CONTACTED':          'bg-pink-500 text-white',
+    'ON_TRIAL':           'bg-amber-500 text-white',
+    'SIGNED':             'bg-green-500 text-white',
+    'DISCARDED':          'bg-red-500 text-white',
+    'NOT_AVAILABLE':      'bg-slate-400 text-white',
   };
   return colors[status] || 'bg-gray-400 text-white';
 }

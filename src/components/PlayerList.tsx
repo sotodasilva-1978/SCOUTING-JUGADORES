@@ -10,15 +10,17 @@ export const PlayerList = memo(function PlayerList({
   onNewPlayer,
   onDeletePlayer,
   initialClubFilter,
+  initialStatusFilter,
 }: {
   players: Player[],
   onSelectPlayer: (player: Player, tab?: string) => void,
   onNewPlayer: () => void,
   onDeletePlayer?: (id: string) => void,
   initialClubFilter?: string,
+  initialStatusFilter?: string,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'ALL');
   const [posFilter, setPosFilter] = useState('ALL');
   const [catFilter, setCatFilter] = useState('ALL');
   const [clubFilter, setClubFilter] = useState(initialClubFilter || 'ALL');
@@ -34,16 +36,23 @@ export const PlayerList = memo(function PlayerList({
   const clubs = useMemo(() => ['ALL', ...new Set(players.filter(Boolean).map(p => p.club_name).filter(Boolean) as string[])].sort(), [players]);
   const statuses = useMemo(() => ['ALL', 'NEW', 'PRIORITY', 'TRACKING', 'DISCARDED', 'OBSERVED', 'INTERESTING', 'VERY_INTERESTING', 'CONTACTED', 'ON_TRIAL', 'SIGNED', 'NOT_AVAILABLE'], []);
 
+  const STATUS_ALIASES: Record<string, string[]> = {
+    'PRIORITY':    ['PRIORITY', 'PRIORIDAD'],
+    'TRACKING':    ['TRACKING', 'EN_SEGUIMIENTO'],
+    'INTERESTING': ['INTERESTING', 'INTERESANTE', 'VERY_INTERESTING', 'MUY_INTERESANTE'],
+  };
+
   const filteredPlayers = useMemo(() => {
+    const allowedStatuses = STATUS_ALIASES[statusFilter] ?? [statusFilter];
     let result = players.filter(Boolean).filter(p => {
       const pFullName = p.full_name || '';
       const pClubName = p.club_name || '';
       const pPosition = p.main_position || '';
-      
-      const matchesSearch = pFullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+
+      const matchesSearch = pFullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            pClubName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            pPosition.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+      const matchesStatus = statusFilter === 'ALL' || allowedStatuses.includes(p.status || '');
       const matchesPos = posFilter === 'ALL' || p.main_position === posFilter;
       const matchesCat = catFilter === 'ALL' || calculateCategory(p.birth_year, p.birth_date) === catFilter;
       const matchesClub = clubFilter === 'ALL' || p.club_name === clubFilter;

@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus, UserMinus } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus, UserMinus, Link, Sparkles } from 'lucide-react';
 import { Match, Player, Report, Video } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -107,13 +107,24 @@ export function MatchDetail({
                 <Users size={18} className="text-emerald-500" />
                 Jugadores Observados
               </h3>
-              <button 
-                onClick={onAddPlayer}
-                className="flex items-center gap-2 text-xs font-black text-emerald-500 hover:text-emerald-400 transition-colors"
-              >
-                <Plus size={16} />
-                Añadir Jugador
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onLinkPlayer}
+                  title="Vincular jugadores de la base de datos"
+                  className="flex items-center gap-1.5 text-xs font-black text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl transition-all border border-emerald-500/20"
+                >
+                  <Link size={13} />
+                  De la BD
+                </button>
+                <button
+                  onClick={onAddPlayer}
+                  title="Añadir jugador visto en el partido"
+                  className="flex items-center gap-1.5 text-xs font-black text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl transition-all border border-amber-500/20"
+                >
+                  <Sparkles size={13} />
+                  Nuevo visto
+                </button>
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -19,6 +19,12 @@ import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
 import { computeAge, calculateCategory, isF11Category, isF8Category, canCreateReport, canPrintReport } from './lib/utils';
+import {
+  applyClubModelToPlayer,
+  ClubModelWeights,
+  DEFAULT_CLUB_MODEL_WEIGHTS,
+  mapRatingWeightsToClubModel,
+} from './lib/clubModel';
 import { useEffect } from 'react';
 
 const isValidUUID = (str: string) => {
@@ -72,6 +78,7 @@ const TRACKED_PLAYER_FIELDS: Array<keyof Player> = [
 
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [clubModelWeights, setClubModelWeights] = useState<ClubModelWeights>(DEFAULT_CLUB_MODEL_WEIGHTS);
   const [matches, setMatches] = useState<Match[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -84,6 +91,7 @@ export default function App() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
   const [playerClubFilter, setPlayerClubFilter] = useState<string | undefined>(undefined);
+  const [playerStatusFilter, setPlayerStatusFilter] = useState<string | undefined>(undefined);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [isNewMatchOpen, setIsNewMatchOpen] = useState(false);
@@ -201,6 +209,17 @@ export default function App() {
         .single();
       if (newClub) clubId = newClub.id;
 
+      let resolvedClubModelWeights = DEFAULT_CLUB_MODEL_WEIGHTS;
+      if (clubId) {
+        const { data: ratingWeightsRow } = await supabase
+          .from('rating_weights')
+          .select('*')
+          .eq('club_id', clubId)
+          .maybeSingle();
+        resolvedClubModelWeights = mapRatingWeightsToClubModel(ratingWeightsRow);
+        setClubModelWeights(resolvedClubModelWeights);
+      }
+
       // 2. Ensure a team exists
       let teamId = null;
       const { data: teams } = await supabase.from('teams').select('id').limit(1);
@@ -229,7 +248,7 @@ export default function App() {
       if (playersData) {
         // Recalcular siempre la edad en cliente para no depender del valor guardado en BD
         setPlayers((playersData as Player[]).map(p => ({
-          ...p,
+          ...applyClubModelToPlayer(p, resolvedClubModelWeights),
           calculated_age: computeAge(p.birth_date, p.birth_year),
         })));
       }
@@ -262,6 +281,14 @@ export default function App() {
   const handleSelectMatch = (match: Match) => {
     setSelectedMatch(match);
     setActiveTab('match_detail');
+  };
+
+  const applyCurrentClubModel = (player: Player) => applyClubModelToPlayer(player, clubModelWeights);
+
+  const handleClubModelWeightsSaved = (nextWeights: ClubModelWeights) => {
+    setClubModelWeights(nextWeights);
+    setPlayers(prev => prev.map(player => applyClubModelToPlayer(player, nextWeights)));
+    setSelectedPlayer(prev => prev ? applyClubModelToPlayer(prev, nextWeights) : prev);
   };
 
   // Helper to clean player data for Supabase
@@ -425,7 +452,7 @@ export default function App() {
 
   const handleSavePlayer = async (newPlayerData: any) => {
     if (editingPlayer) {
-      const updatedPlayer = { 
+      const updatedPlayer = applyCurrentClubModel({
         ...editingPlayer, 
         full_name: newPlayerData.name, 
         first_name: newPlayerData.name?.split(' ')[0] || '',
@@ -452,10 +479,9 @@ export default function App() {
         main_doubt: newPlayerData.main_doubt || editingPlayer.main_doubt,
         differential_talent: newPlayerData.differential_talent || editingPlayer.differential_talent,
         risk_level: newPlayerData.risk_level || editingPlayer.risk_level,
-        club_fit: newPlayerData.club_fit || editingPlayer.club_fit,
         next_step: newPlayerData.next_step || editingPlayer.next_step,
         updated_at: new Date().toISOString()
-      };
+      });
 
       const updatedPlayers = players.map(p => p.id === editingPlayer.id ? updatedPlayer : p);
       setPlayers(updatedPlayers);
@@ -475,7 +501,7 @@ export default function App() {
 
     } else {
       const birthYear = Number(newPlayerData.birth_year) || 2005;
-      const newPlayer: Player = {
+      const newPlayer: Player = applyCurrentClubModel({
         id: (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : '00000000-0000-0000-0000-000000000000', // Placeholder or omitted
         club_id: undefined, // Will be fixed in preparePlayerForDB
         first_name: newPlayerData.name?.split(' ')[0] || '',
@@ -507,7 +533,6 @@ export default function App() {
         main_doubt: newPlayerData.main_doubt || '',
         differential_talent: newPlayerData.differential_talent || '',
         risk_level: newPlayerData.risk_level || 'LOW',
-        club_fit: newPlayerData.club_fit || '',
         next_step: newPlayerData.next_step || '',
         has_video: !!newPlayerData.videoUrl,
         has_images: false,
@@ -515,7 +540,7 @@ export default function App() {
         created_by: '',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      };
+      });
 
       if (newPlayer.id === '00000000-0000-0000-0000-000000000000') {
         const fallbackId = `temp-${Date.now()}`;
@@ -538,7 +563,7 @@ export default function App() {
           console.error('Supabase player insert error:', error);
           alert('Error al guardar en la base de datos: ' + error.message);
         } else if (data && data[0]) {
-          setPlayers(prev => [data[0], ...prev.filter(p => p.id !== newPlayer.id)]);
+          setPlayers(prev => [applyCurrentClubModel(data[0] as Player), ...prev.filter(p => p.id !== newPlayer.id)]);
           console.log('Player persisted successfully in Supabase');
         }
       } catch (err) {
@@ -586,31 +611,32 @@ export default function App() {
   };
 
   const handleUpdatePlayer = async (updatedPlayer: Player) => {
-    const previousPlayer = players.find(p => p.id === updatedPlayer.id);
+    const normalizedPlayer = applyCurrentClubModel(updatedPlayer);
+    const previousPlayer = players.find(p => p.id === normalizedPlayer.id);
 
     // Local update for immediate feedback
-    setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
-    if (selectedPlayer?.id === updatedPlayer.id) {
-      setSelectedPlayer(updatedPlayer);
+    setPlayers(prev => prev.map(p => p.id === normalizedPlayer.id ? normalizedPlayer : p));
+    if (selectedPlayer?.id === normalizedPlayer.id) {
+      setSelectedPlayer(normalizedPlayer);
     }
 
     // Persist to Supabase
     try {
-      if (isValidUUID(updatedPlayer.id)) {
-        const cleaned = await preparePlayerForDB(updatedPlayer);
+      if (isValidUUID(normalizedPlayer.id)) {
+        const cleaned = await preparePlayerForDB(normalizedPlayer);
         console.log('Updating player in Supabase with data:', cleaned);
         
         const { error } = await supabase
           .from('players')
           .update(cleaned)
-          .eq('id', updatedPlayer.id);
+          .eq('id', normalizedPlayer.id);
 
         if (error) {
           console.error('Error updating player in Supabase:', error);
           alert('Error al actualizar en la base de datos: ' + error.message);
         } else {
           if (previousPlayer) {
-            await persistHistoryEntries(buildPlayerHistoryEntries(previousPlayer, updatedPlayer));
+            await persistHistoryEntries(buildPlayerHistoryEntries(previousPlayer, normalizedPlayer));
           }
            console.log('Player updated successfully in Supabase');
         }
@@ -645,9 +671,12 @@ export default function App() {
     await supabase.from('reports').delete().eq('id', reportId);
   };
 
-  const handleLinkPlayerToMatch = async (playerId: string) => {
-    if (!selectedMatch) return;
-    const updatedIds = [...(selectedMatch.observed_players_ids || []), playerId];
+  const handleLinkPlayerToMatch = async (playerIds: string[]) => {
+    if (!selectedMatch || playerIds.length === 0) return;
+    const existing = selectedMatch.observed_players_ids || [];
+    const toAdd = playerIds.filter(id => !existing.includes(id));
+    if (toAdd.length === 0) return;
+    const updatedIds = [...existing, ...toAdd];
     setMatches(prev => prev.map(m =>
       m.id === selectedMatch.id ? { ...m, observed_players_ids: updatedIds } : m
     ));
@@ -810,7 +839,7 @@ export default function App() {
         return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
       };
 
-      const updatedPlayer: Player = {
+      const updatedPlayer: Player = applyCurrentClubModel({
         ...playerToUpdate,
         short_name: data.short_name || playerToUpdate.short_name,
         competition: data.competition || playerToUpdate.competition,
@@ -879,7 +908,7 @@ export default function App() {
         rating_juego_aereo: avgRating('rating_juego_aereo') || playerToUpdate.rating_juego_aereo,
 
         updated_at: new Date().toISOString()
-      };
+      });
 
       setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
       if (selectedPlayer?.id === updatedPlayer.id) {
@@ -982,6 +1011,7 @@ export default function App() {
         onDelete={() => handleDeletePlayer(selectedPlayer.id)}
         onEdit={() => handleEditPlayer(selectedPlayer)}
         onCreateReport={() => handleCreateReport(selectedPlayer.id)}
+        onEditReport={handleEditReport}
         onAddVideo={(v) => handleAddVideo({ ...v, player_id: selectedPlayer.id })}
         onDeleteVideo={handleDeleteVideo}
         onUpdatePlayer={handleUpdatePlayer}
@@ -1041,6 +1071,11 @@ export default function App() {
           onSelectPlayer={handleSelectPlayer}
           onSelectMatch={handleSelectMatch}
           onTabChange={setActiveTab}
+          onNavigatePlayers={(statusFilter) => {
+            setPlayerStatusFilter(statusFilter);
+            setPlayerClubFilter(undefined);
+            setActiveTab('players');
+          }}
           players={scopedPlayers}
           matches={matches}
           reports={scopedReports}
@@ -1048,12 +1083,13 @@ export default function App() {
         />;
       case 'players':
         return <PlayerList
-          key={playerClubFilter ?? 'all'}
+          key={`${playerClubFilter ?? 'all'}-${playerStatusFilter ?? 'all'}`}
           players={scopedPlayers}
           onSelectPlayer={handleSelectPlayer}
           onNewPlayer={() => setIsQuickAddOpen(true)}
           onDeletePlayer={handleDeletePlayer}
           initialClubFilter={playerClubFilter}
+          initialStatusFilter={playerStatusFilter}
           userRole={userRole}
           userId={userId}
         />;
@@ -1090,10 +1126,14 @@ export default function App() {
           userId={userId}
         />;
       case 'comparativas':
-        return <Comparativas players={scopedPlayers} />;
+        return <Comparativas players={scopedPlayers} userRole={userRole} />;
       case 'settings':
       case 'users':
-        return <SettingsPanel userRole={userRole} />;
+        return <SettingsPanel
+          userRole={userRole}
+          initialWeights={clubModelWeights}
+          onWeightsSaved={handleClubModelWeightsSaved}
+        />;
       default:
         return <Dashboard
           onSelectPlayer={handleSelectPlayer}
@@ -1124,7 +1164,7 @@ export default function App() {
       <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab) => {
-          if (tab === 'players') setPlayerClubFilter(undefined);
+          if (tab === 'players') { setPlayerClubFilter(undefined); setPlayerStatusFilter(undefined); }
           setActiveTab(tab);
         }}
         role={userRole}
@@ -1197,6 +1237,7 @@ export default function App() {
         isOpen={isNewMatchOpen}
         onClose={() => setIsNewMatchOpen(false)}
         onSave={handleSaveMatch}
+        clubs={Array.from(new Set(players.map(p => p.club_name).filter(Boolean))).sort() as string[]}
       />
     </div>
   );

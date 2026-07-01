@@ -4,13 +4,15 @@ import {
   History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
   TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
   MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
-  LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink
+  LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink, Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
 import { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
-import { uploadPlayerPhoto } from '../lib/supabase';
+import { createPortal } from 'react-dom';
+import { supabase, uploadPlayerPhoto } from '../lib/supabase';
+import { formatClubFitDisplay } from '../lib/clubModel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -162,6 +164,36 @@ const PLAYER_STATUS_OPTIONS = [
   { value: 'DISCARDED', label: 'Descartado' },
 ];
 
+const CAREER_CATEGORY_OPTIONS = [
+  'SENIOR',
+  'JUVENIL',
+  'CADETE',
+  'INFANTIL',
+  'ALEVIN',
+  'BENJAMIN',
+  'PRE-BENJAMIN',
+];
+
+type CareerFormData = {
+  id?: string;
+  club_id: string;
+  new_club_name: string;
+  season: string;
+  team: string;
+  category: string;
+  competition: string;
+  matches_played: number;
+  minutes_played: number;
+  goals: number;
+  yellow_cards: number;
+  red_cards: number;
+};
+
+const emptyCareerForm = (): CareerFormData => ({
+  club_id: '', new_club_name: '', season: '', team: '', category: '', competition: '',
+  matches_played: 0, minutes_played: 0, goals: 0, yellow_cards: 0, red_cards: 0,
+});
+
 type PosData = {
   top?: string; bottom?: string;
   left?: string; right?: string;
@@ -192,33 +224,117 @@ const makeDotStyle = (pos: string) => {
   return { top: p.top, bottom: p.bottom, left: p.left, right: p.right, transform };
 };
 
-const PitchMap = ({ position, secondaryPositions = [] }: { position: string; secondaryPositions?: string[] }) => (
-  <div className="relative w-full max-w-[180px] mx-auto aspect-[3/4] bg-emerald-950/40 rounded-2xl border border-emerald-500/20 overflow-hidden shadow-inner group">
-    {/* Field markings */}
-    <div className="absolute inset-0 border-[1.5px] border-white/20 m-3 rounded-lg" />
-    <div className="absolute top-1/2 left-0 right-0 h-px bg-white/20" />
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 border-[1.5px] border-white/20 rounded-full" />
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 w-16 h-9 border-x-[1.5px] border-b-[1.5px] border-white/20" />
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-16 h-9 border-x-[1.5px] border-t-[1.5px] border-white/20" />
+const PitchMap = ({ position, secondaryPositions = [], className }: { position: string; secondaryPositions?: string[]; className?: string }) => (
+  <div className={cn("relative w-full max-w-[260px] mx-auto aspect-[68/100] overflow-hidden rounded-xl border border-emerald-400/25 bg-[#062d27] shadow-[0_24px_60px_rgba(0,0,0,0.35),inset_0_0_35px_rgba(16,185,129,0.08)]", className)}>
+    <svg viewBox="0 0 680 1000" className="absolute inset-0 h-full w-full" aria-hidden="true">
+      <defs>
+        <linearGradient id="pitch-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0b4a3c" />
+          <stop offset="1" stopColor="#052b26" />
+        </linearGradient>
+        <pattern id="pitch-stripes" width="136" height="1000" patternUnits="userSpaceOnUse">
+          <rect width="68" height="1000" fill="#ffffff" fillOpacity="0.025" />
+        </pattern>
+      </defs>
+      <rect width="680" height="1000" fill="url(#pitch-bg)" />
+      <rect width="680" height="1000" fill="url(#pitch-stripes)" />
+      <g fill="none" stroke="#d9fff2" strokeOpacity="0.42" strokeWidth="4">
+        <rect x="38" y="38" width="604" height="924" rx="10" />
+        <path d="M38 500h604" />
+        <circle cx="340" cy="500" r="92" />
+        <circle cx="340" cy="500" r="5" fill="#d9fff2" />
+        <path d="M205 38v150h270V38M265 38v62h150V38" />
+        <path d="M205 962V812h270v150M265 962v-62h150v62" />
+        <path d="M279 188a76 76 0 0 0 122 0M279 812a76 76 0 0 1 122 0" />
+        <circle cx="340" cy="130" r="5" fill="#d9fff2" />
+        <circle cx="340" cy="870" r="5" fill="#d9fff2" />
+        <path d="M285 38V22h110v16M285 962v16h110v-16" />
+      </g>
+    </svg>
 
-    {/* Secondary position dots — yellow, smaller */}
     {(secondaryPositions || []).filter(Boolean).map((pos, i) => (
-      <div
-        key={i}
-        className="absolute w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)] border border-white/70 transition-all duration-700"
-        style={makeDotStyle(pos)}
-      />
+      <div key={`${pos}-${i}`} className="absolute transition-all duration-500" style={makeDotStyle(pos)}>
+        <div className="flex h-6 min-w-6 items-center justify-center rounded-full border border-amber-100 bg-amber-400 px-1 text-[8px] font-black leading-none text-slate-950 shadow-[0_0_12px_rgba(251,191,36,0.55)]">
+          {pos}
+        </div>
+      </div>
     ))}
 
-    {/* Main position dot — red, larger */}
-    <div
-      className="absolute w-5 h-5 rounded-full bg-red-500 shadow-[0_0_16px_rgba(239,68,68,0.8)] border-2 border-white/60 transition-all duration-700"
-      style={makeDotStyle(position)}
-    />
-
-    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
+    <div className="absolute transition-all duration-500" style={makeDotStyle(position)}>
+      <div className="relative flex h-8 min-w-8 items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1.5 text-[8px] font-black leading-none text-white shadow-[0_0_0_3px_rgba(244,63,94,0.14),0_0_16px_rgba(244,63,94,0.7)]">
+        {position}
+        <span className="absolute inset-0 animate-ping rounded-full border border-rose-300 opacity-30" />
+      </div>
+    </div>
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-slate-950/35 to-transparent" />
   </div>
 );
+
+function PrintableRadar({ title, attributes, player, color }: {
+  title: string;
+  attributes: readonly { label: string; field: string }[];
+  player: Player;
+  color: string;
+}) {
+  const cx = 150, cy = 148;
+  const radius = 78;
+  const labelR = 116;
+  const n = attributes.length;
+  const angle = (i: number) => -Math.PI / 2 + i * (Math.PI * 2 / n);
+  const px = (i: number, r: number) => cx + Math.cos(angle(i)) * r;
+  const py = (i: number, r: number) => cy + Math.sin(angle(i)) * r;
+  const ring = (r: number) => attributes.map((_, i) => `${px(i,r)},${py(i,r)}`).join(' ');
+  const values = attributes.map(a => Number(player[a.field as keyof Player]) || 0);
+  const dataPolygon = values.map((v, i) => `${px(i, radius * v / 5)},${py(i, radius * v / 5)}`).join(' ');
+
+  return (
+    <div className="pdf-radar-card">
+      <h4 style={{ color }}>{title}</h4>
+      <div className="pdf-radar-body">
+        <svg viewBox="0 0 300 300" aria-label={`Radar ${title}`}>
+          {/* Rings */}
+          {[1,2,3,4,5].map(lvl => (
+            <polygon key={lvl} points={ring(radius * lvl / 5)}
+              fill={lvl % 2 ? '#f5f9f7' : '#ffffff'} stroke="#dce8e3" strokeWidth="0.8" />
+          ))}
+          {/* Axis lines */}
+          {attributes.map((_, i) => (
+            <line key={i} x1={cx} y1={cy} x2={px(i,radius)} y2={py(i,radius)} stroke="#dce8e3" strokeWidth="0.8" />
+          ))}
+          {/* Data polygon */}
+          <polygon points={dataPolygon} fill={`${color}28`} stroke={color} strokeWidth="2" />
+          {/* Dots */}
+          {values.map((v, i) => v
+            ? <circle key={i} cx={px(i, radius*v/5)} cy={py(i, radius*v/5)} r="3.5" fill={color} />
+            : null
+          )}
+          {/* Vertex labels: name above, value below (both anchored to vertex point) */}
+          {attributes.map((attr, i) => {
+            const a = angle(i);
+            const lx = cx + Math.cos(a) * labelR;
+            const ly = cy + Math.sin(a) * labelR;
+            const cosA = Math.cos(a);
+            const sinA = Math.sin(a);
+            const anchor: 'start'|'end'|'middle' = cosA > 0.25 ? 'start' : cosA < -0.25 ? 'end' : 'middle';
+            // push value away from center
+            const valueOffset = sinA > 0.2 ? 9 : -9;
+            return (
+              <g key={attr.field}>
+                <text x={lx} y={ly} textAnchor={anchor} fontSize="5.8" fontWeight="750" fill="#485650"
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {attr.label}
+                </text>
+                <text x={lx} y={ly + valueOffset} textAnchor={anchor} fontSize="8.5" fontWeight="900" fill={color}>
+                  {values[i] || '—'}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 interface PlayerDetailProps {
   player: Player;
@@ -230,6 +346,7 @@ interface PlayerDetailProps {
   onDelete: () => void;
   onEdit: () => void;
   onCreateReport: (mode: 'RAPID' | 'COMPLETE') => void;
+  onEditReport?: (report: Report) => void;
   onAddVideo: (video: { url: string; title: string; description?: string; is_key?: boolean }) => void;
   onDeleteVideo?: (videoId: string) => void;
   onUpdatePlayer?: (player: Player) => void;
@@ -276,11 +393,13 @@ export function PlayerDetail({
   onBack, 
   onDelete, 
   onEdit, 
-  onCreateReport, 
+  onCreateReport,
+  onEditReport,
   onAddVideo,
   onDeleteVideo,
   onUpdatePlayer,
-  initialTab = 'resumen'
+  initialTab = 'resumen',
+  userRole
 }: PlayerDetailProps) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [editMode, setEditMode] = useState(false);
@@ -288,6 +407,14 @@ export function PlayerDetail({
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [showCareerModal, setShowCareerModal] = useState(false);
+  const [careerEntries, setCareerEntries] = useState<TrajectoryEntry[]>(player.trajectory || []);
+  const [careerForm, setCareerForm] = useState<CareerFormData>(emptyCareerForm());
+  const [careerClubs, setCareerClubs] = useState<{ id: string; name: string }[]>([]);
+  const [savingCareer, setSavingCareer] = useState(false);
+  const [careerError, setCareerError] = useState('');
+  const [showPrintSelector, setShowPrintSelector] = useState(false);
+  const [printMode, setPrintMode] = useState<'summary' | 'scouting' | 'data' | 'profile' | 'complete'>('scouting');
   const [lightboxVideo, setLightboxVideo] = useState<VideoType | null>(null);
   const videoPlayerRef = useRef<HTMLDivElement>(null);
   const [newVideoUrl, setNewVideoUrl] = useState('');
@@ -299,7 +426,51 @@ export function PlayerDetail({
   const [uploadError, setUploadError] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
 
+  // Scroll the active tab into view whenever it changes
+  useEffect(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const activeEl = el.querySelector<HTMLElement>('[data-active="true"]');
+    if (activeEl) {
+      const center = activeEl.offsetLeft - el.offsetWidth / 2 + activeEl.offsetWidth / 2;
+      el.scrollTo({ left: center, behavior: 'smooth' });
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCareerData = async () => {
+      const [entriesResult, clubsResult] = await Promise.all([
+        supabase.from('player_career_entries').select('*').eq('player_id', player.id).order('season', { ascending: false }),
+        supabase.from('clubs').select('id,name').order('name'),
+      ]);
+      if (cancelled) return;
+      if (!entriesResult.error && entriesResult.data) {
+        setCareerEntries(entriesResult.data.map((entry: any) => ({
+          id: entry.id,
+          player_id: entry.player_id,
+          club_id: entry.club_id,
+          club_name_snapshot: entry.club_name_snapshot,
+          season: entry.season,
+          team: entry.team_name,
+          category: entry.category,
+          competition: entry.competition,
+          matches_played: entry.matches_played,
+          minutes_played: entry.minutes_played,
+          goals: entry.goals,
+          yellow_cards: entry.yellow_cards,
+          red_cards: entry.red_cards,
+          created_at: entry.created_at,
+          updated_at: entry.updated_at,
+        })));
+      }
+      if (!clubsResult.error && clubsResult.data) setCareerClubs(clubsResult.data);
+    };
+    loadCareerData();
+    return () => { cancelled = true; };
+  }, [player.id]);
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -400,6 +571,17 @@ export function PlayerDetail({
     return Math.round((all.reduce((a, b) => a + b, 0) / all.length) * 10) / 10;
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    setFormData(prev => ({ ...prev, status: newStatus as any }));
+    if (!onUpdatePlayer) return;
+    try {
+      await onUpdatePlayer({ ...player, ...formData, status: newStatus as any });
+    } catch {
+      // revert on error
+      setFormData(prev => ({ ...prev, status: player.status }));
+    }
+  };
+
   const handleSave = async () => {
     if (!onUpdatePlayer) return;
     setSaving(true);
@@ -471,7 +653,7 @@ export function PlayerDetail({
           ) : (
             <input 
               type={type}
-              value={isArray ? (value as string[] || []).join(', ') : (value || '')}
+              value={isArray ? (value as string[] || []).join(', ') : (typeof value === 'string' || typeof value === 'number' ? value : '')}
               onChange={(e) => {
                 const val = type === 'number' ? Number(e.target.value) : isArray ? e.target.value.split(',').map(s => s.trim()) : e.target.value;
                 setFormData(prev => ({ ...prev, [field]: val }));
@@ -597,17 +779,127 @@ export function PlayerDetail({
   };
 
   const tabs = [
-    { id: 'resumen', label: 'Resumen', icon: Target },
-    { id: 'ficha', label: 'Ficha Scouting', icon: LayoutDashboard },
-    { id: 'datos', label: 'Datos', icon: Info },
-    { id: 'perfil', label: 'Perfil Futbolístico', icon: Zap },
-    { id: 'informes', label: 'Informes', icon: ClipboardList },
-    { id: 'partidos', label: 'Partidos', icon: Trophy },
-    { id: 'multimedia', label: 'Multimedia', icon: Video },
-    { id: 'seguimiento', label: 'Seguimiento', icon: TrendingUp },
-    { id: 'decision', label: 'Decisión Club', icon: Gavel },
-    { id: 'historial', label: 'Historial', icon: History },
+    { id: 'resumen',    label: 'Resumen',          icon: Target },
+    { id: 'ficha',      label: 'Ficha Scouting',   icon: LayoutDashboard },
+    { id: 'datos',      label: 'Datos',             icon: Info },
+    { id: 'perfil',     label: 'Perfil Futbol.',    icon: Zap },
+    { id: 'informes',   label: 'Informes',          icon: ClipboardList },
+    { id: 'partidos',   label: 'Partidos',          icon: Trophy },
+    { id: 'multimedia', label: 'Multimedia',        icon: Video },
+    { id: 'actividad',  label: 'Actividad',         icon: TrendingUp },
+    { id: 'decision',   label: 'Decisión Club',     icon: Gavel },
   ];
+
+  const currentStatus = formData.status || player.status || 'TRACKING';
+  const currentMainPosition = formData.main_position || player.main_position;
+  const currentSecondaryPositions = formData.secondary_positions || player.secondary_positions || [];
+  const printablePlayer = { ...player, ...formData } as Player;
+  const canPrintReport = ['ADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
+
+  const handlePrintReport = (mode: 'summary' | 'scouting' | 'data' | 'profile' | 'complete') => {
+    const cleanup = () => document.body.classList.remove('printing-player-report');
+    setPrintMode(mode);
+    setShowPrintSelector(false);
+    document.body.classList.add('printing-player-report');
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.setTimeout(() => window.print(), 150);
+  };
+
+  const openCareerModal = (entry?: TrajectoryEntry) => {
+    setCareerError('');
+    setCareerForm(entry ? {
+      id: entry.id,
+      club_id: entry.club_id || '',
+      new_club_name: '',
+      season: entry.season,
+      team: entry.team,
+      category: entry.category,
+      competition: entry.competition || '',
+      matches_played: entry.matches_played || 0,
+      minutes_played: entry.minutes_played ?? entry.minutes ?? 0,
+      goals: entry.goals || 0,
+      yellow_cards: entry.yellow_cards || 0,
+      red_cards: entry.red_cards || 0,
+    } : emptyCareerForm());
+    setShowCareerModal(true);
+  };
+
+  const saveCareerEntry = async () => {
+    if (!careerForm.season.trim() || !careerForm.team.trim() || !careerForm.category.trim() || !careerForm.competition.trim()) {
+      setCareerError('Completa temporada, equipo, categoría y competición.');
+      return;
+    }
+    if (!careerForm.club_id && !careerForm.new_club_name.trim()) {
+      setCareerError('Selecciona un club o introduce uno nuevo.');
+      return;
+    }
+
+    setSavingCareer(true);
+    setCareerError('');
+    try {
+      let clubId = careerForm.club_id;
+      let clubName = careerClubs.find(club => club.id === clubId)?.name || careerForm.new_club_name.trim();
+
+      if (!clubId) {
+        const existing = careerClubs.find(club => club.name.toLocaleLowerCase() === clubName.toLocaleLowerCase());
+        if (existing) {
+          clubId = existing.id;
+          clubName = existing.name;
+        } else {
+          const { data, error } = await supabase.from('clubs').insert({ name: clubName, current_season: careerForm.season }).select('id,name').single();
+          if (error) throw error;
+          clubId = data.id;
+          clubName = data.name;
+          setCareerClubs(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+        }
+      }
+
+      const payload = {
+        player_id: player.id,
+        club_id: clubId,
+        club_name_snapshot: clubName,
+        season: careerForm.season.trim(),
+        team_name: careerForm.team.trim(),
+        category: careerForm.category.trim(),
+        competition: careerForm.competition.trim(),
+        matches_played: Number(careerForm.matches_played) || 0,
+        minutes_played: Number(careerForm.minutes_played) || 0,
+        goals: Number(careerForm.goals) || 0,
+        yellow_cards: Number(careerForm.yellow_cards) || 0,
+        red_cards: Number(careerForm.red_cards) || 0,
+      };
+
+      const query = careerForm.id
+        ? supabase.from('player_career_entries').update(payload).eq('id', careerForm.id).select('*').single()
+        : supabase.from('player_career_entries').insert(payload).select('*').single();
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const saved: TrajectoryEntry = {
+        id: data.id, player_id: data.player_id, club_id: data.club_id, season: data.season,
+        club_name_snapshot: data.club_name_snapshot,
+        team: data.team_name, category: data.category, competition: data.competition,
+        matches_played: data.matches_played, minutes_played: data.minutes_played, goals: data.goals,
+        yellow_cards: data.yellow_cards, red_cards: data.red_cards,
+      };
+      setCareerEntries(prev => careerForm.id
+        ? prev.map(entry => entry.id === careerForm.id ? saved : entry)
+        : [saved, ...prev]);
+      setShowCareerModal(false);
+    } catch (error: any) {
+      setCareerError(error?.message?.includes('player_career_entries')
+        ? 'Falta crear la tabla en Supabase. Ejecuta player_career_entries_migration.sql.'
+        : error?.message || 'No se pudo guardar la trayectoria.');
+    } finally {
+      setSavingCareer(false);
+    }
+  };
+
+  const deleteCareerEntry = async (entry: TrajectoryEntry) => {
+    if (!entry.id || !window.confirm(`¿Eliminar la temporada ${entry.season} de ${entry.team}?`)) return;
+    const { error } = await supabase.from('player_career_entries').delete().eq('id', entry.id);
+    if (!error) setCareerEntries(prev => prev.filter(item => item.id !== entry.id));
+  };
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -637,13 +929,13 @@ export function PlayerDetail({
                   <ImageIcon size={20} className="text-white" />
                 </div>
               </div>
-              <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(player.status))} />
+              <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(currentStatus))} />
             </div>
             <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate max-w-full">{player.full_name}</h1>
-                <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0", getStatusColor(player.status))}>
-                   {PLAYER_STATUS_OPTIONS.find(o => o.value === player.status)?.label || player.status}
+                <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0 transition-colors", getStatusColor(currentStatus))}>
+                   {PLAYER_STATUS_OPTIONS.find(o => o.value === currentStatus)?.label || currentStatus}
                 </div>
               </div>
               <p className="text-xs sm:text-sm font-bold text-slate-400 truncate">
@@ -657,6 +949,15 @@ export function PlayerDetail({
           </div>
 
           <div className="grid grid-cols-4 sm:flex sm:flex-wrap items-center gap-2 w-full xl:w-auto">
+             {canPrintReport && (
+               <button
+                 onClick={() => setShowPrintSelector(true)}
+                 title="Elegir contenido para imprimir o guardar como PDF"
+                 className="col-span-2 sm:col-span-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2.5 rounded-xl text-[9px] font-black hover:bg-emerald-500 hover:text-slate-950 transition-all flex items-center justify-center gap-1.5"
+               >
+                 <Printer size={14} /> IMPRIMIR
+               </button>
+             )}
              <button onClick={onEdit} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-all flex items-center justify-center"><Edit3 size={16} /></button>
              
              {showDeleteConfirm ? (
@@ -723,16 +1024,21 @@ export function PlayerDetail({
         </div>
       </div>
 
-      {/* NAVEGACIÓN POR PESTAÑAS (Responsiva: Scroll horizontal en móvil) */}
-      <div className="flex items-center gap-1 bg-slate-900/50 p-1.5 rounded-[1.5rem] border border-slate-800/50 overflow-x-auto no-scrollbar scroll-smooth">
+      {/* NAVEGACIÓN POR PESTAÑAS */}
+      <div
+        ref={tabsScrollRef}
+        className="flex items-center gap-1 bg-slate-900/50 p-1.5 rounded-[1.5rem] border border-slate-800/50 overflow-x-auto"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#334155 transparent' }}
+      >
         {tabs.map(tab => (
           <button
             key={tab.id}
+            data-active={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex items-center gap-2 px-5 py-3 rounded-xl text-[10px] font-black transition-all whitespace-nowrap uppercase tracking-widest",
-              activeTab === tab.id 
-                ? "bg-slate-800 text-emerald-500 shadow-md border border-slate-700" 
+              "flex items-center gap-2 px-5 py-3 rounded-xl text-[10px] font-black transition-all whitespace-nowrap uppercase tracking-widest flex-shrink-0",
+              activeTab === tab.id
+                ? "bg-slate-800 text-emerald-500 shadow-md border border-slate-700"
                 : "text-slate-500 hover:text-slate-300"
             )}
           >
@@ -799,7 +1105,7 @@ export function PlayerDetail({
                            <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500 shrink-0"><Shield size={20} /></div>
                            <div>
                               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Encaje en el Club</p>
-                              <p className="text-sm text-slate-200 font-bold mt-1">{player.club_fit || 'Evaluar adaptabilidad...'}</p>
+                              <p className="text-sm text-slate-200 font-bold mt-1">{formatClubFitDisplay(player)}</p>
                            </div>
                         </div>
                         <div className="pt-6 border-t border-slate-800">
@@ -838,7 +1144,7 @@ export function PlayerDetail({
             {activeTab === 'ficha' && (
               <div className="space-y-8 animate-in fade-in duration-700">
                 {/* BLOQUE SUPERIOR (Image 2 style) */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                    {/* Columna Izquierda: Foto y Datos Generales */}
                    <div className="lg:col-span-2 space-y-6">
                       <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 flex flex-col md:flex-row gap-8 items-center md:items-start shadow-xl backdrop-blur-sm">
@@ -880,8 +1186,8 @@ export function PlayerDetail({
                            <Target size={18} className="text-emerald-500/50" />
                         </div>
                         <select
-                          value={formData.status || player.status || 'TRACKING'}
-                          onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
+                          value={currentStatus}
+                          onChange={(e) => handleStatusChange(e.target.value)}
                           className="w-full bg-slate-950 border-2 border-slate-700 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-emerald-500 appearance-none cursor-pointer hover:border-slate-600 transition-all"
                           style={{
                             backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2310b981' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e")`,
@@ -899,47 +1205,47 @@ export function PlayerDetail({
 
                       {/* TRAYECTORIA TABLE (Image 2 style) */}
                       <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 shadow-xl backdrop-blur-sm overflow-hidden min-h-[300px]">
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between gap-3 mb-8">
                            <h3 className="text-[11px] font-black text-white uppercase tracking-[0.3em] bg-slate-950/80 px-6 py-2.5 rounded-full italic border border-slate-800">TRAYECTORIA</h3>
-                           <Trophy size={18} className="text-amber-500/50" />
+                           <button onClick={() => openCareerModal()} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-[9px] font-black uppercase text-slate-950 hover:bg-emerald-400"><Plus size={14} /> Añadir temporada</button>
                         </div>
                         <div className="overflow-x-auto no-scrollbar">
                            <table className="w-full text-[10px] font-bold text-slate-400">
                              <thead>
                                <tr className="bg-slate-950/60 text-emerald-500 border border-slate-800">
                                  <th className="px-3 py-3 text-left first:rounded-l-xl">TEMP</th>
+                                 <th className="px-3 py-3 text-left">CLUB</th>
                                  <th className="px-3 py-3 text-left">EQUIPO</th>
                                  <th className="px-3 py-3 text-left">CATEG</th>
-                                 <th className="px-3 py-3 text-center">MIN</th>
-                                 <th className="px-3 py-3 text-center">PJ</th>
-                                 <th className="px-3 py-3 text-center">TIT</th>
-                                 <th className="px-3 py-3 text-center">SUP</th>
-                                 <th className="px-3 py-3 text-center">GOL</th>
-                                 <th className="px-3 py-3 text-center">ASIST</th>
-                                 <th className="px-3 py-3 text-center">TA</th>
-                                 <th className="px-3 py-3 text-center last:rounded-r-xl">TR</th>
+                                  <th className="px-3 py-3 text-left">COMPETICIÓN</th>
+                                  <th className="px-3 py-3 text-center">PJ</th>
+                                  <th className="px-3 py-3 text-center">MIN</th>
+                                  <th className="px-3 py-3 text-center">GOL</th>
+                                  <th className="px-3 py-3 text-center">TA</th>
+                                  <th className="px-3 py-3 text-center">TR</th>
+                                  <th className="px-3 py-3 text-center last:rounded-r-xl">ACCIONES</th>
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-800/50">
-                               {(player.trajectory || []).length > 0 ? (
-                                 player.trajectory?.map((t, i) => (
-                                   <tr key={i} className="hover:bg-slate-800/20 transition-colors">
+                               {careerEntries.length > 0 ? (
+                                  careerEntries.map((t, i) => (
+                                    <tr key={t.id || i} className="hover:bg-slate-800/20 transition-colors">
                                      <td className="px-3 py-3 whitespace-nowrap">{t.season}</td>
+                                     <td className="px-3 py-3 text-white truncate max-w-[130px]">{t.club_name_snapshot || careerClubs.find(club => club.id === t.club_id)?.name || '—'}</td>
                                      <td className="px-3 py-3 text-white truncate max-w-[120px]">{t.team}</td>
                                      <td className="px-3 py-3 truncate max-w-[80px]">{t.category}</td>
-                                     <td className="px-3 py-3 text-center">{t.minutes}</td>
-                                     <td className="px-3 py-3 text-center">{t.matches_played}</td>
-                                     <td className="px-3 py-3 text-center">{t.starts}</td>
-                                     <td className="px-3 py-3 text-center">{t.substitutes}</td>
-                                     <td className="px-3 py-3 text-center text-emerald-500">{t.goals}</td>
-                                     <td className="px-3 py-3 text-center text-blue-500">{t.assists}</td>
-                                     <td className="px-3 py-3 text-center text-amber-500">{t.yellow_cards}</td>
-                                     <td className="px-3 py-3 text-center text-red-500">{t.red_cards}</td>
+                                      <td className="px-3 py-3 truncate max-w-[110px]">{t.competition || '—'}</td>
+                                      <td className="px-3 py-3 text-center">{t.matches_played}</td>
+                                      <td className="px-3 py-3 text-center">{t.minutes_played ?? t.minutes ?? 0}</td>
+                                      <td className="px-3 py-3 text-center text-emerald-500">{t.goals}</td>
+                                      <td className="px-3 py-3 text-center text-amber-500">{t.yellow_cards}</td>
+                                      <td className="px-3 py-3 text-center text-red-500">{t.red_cards}</td>
+                                      <td className="px-3 py-3"><div className="flex justify-center gap-1"><button onClick={() => openCareerModal(t)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-emerald-400" title="Editar"><Edit3 size={13} /></button><button onClick={() => deleteCareerEntry(t)} className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400" title="Eliminar"><Trash2 size={13} /></button></div></td>
                                    </tr>
                                  ))
                                ) : (
                                  <tr>
-                                   <td colSpan={11} className="px-3 py-16 text-center text-slate-600 italic tracking-widest uppercase text-[9px] font-black">Sin historial registrado</td>
+                                    <td colSpan={11} className="px-3 py-16 text-center text-slate-600 italic tracking-widest uppercase text-[9px] font-black">Sin historial registrado</td>
                                  </tr>
                                )}
                              </tbody>
@@ -949,34 +1255,32 @@ export function PlayerDetail({
                    </div>
 
                    {/* Columna Derecha: Mapa del Campo (Image 2 style) */}
-                   <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 shadow-xl backdrop-blur-sm flex flex-col gap-8 justify-between">
+                   <div className="bg-slate-900/40 border border-slate-800/80 rounded-[1.75rem] p-6 md:p-8 shadow-xl backdrop-blur-sm flex flex-col gap-6 lg:sticky lg:top-[190px]">
                       <div className="flex items-center justify-between">
                          <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-widest italic font-sans">DEMARCACIÓN</h3>
                          <div className="p-2 bg-slate-950 rounded-lg border border-slate-800"><MapPin size={16} className="text-emerald-500" /></div>
                       </div>
-                      <PitchMap position={player.main_position} secondaryPositions={player.secondary_positions} />
-                      <div className="space-y-3">
-                         <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner flex items-center gap-3">
+                       <PitchMap position={currentMainPosition} secondaryPositions={currentSecondaryPositions} />
+                       <div className="grid grid-cols-2 gap-2.5">
+                          <div className="col-span-2 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl shadow-inner flex flex-col items-center justify-center gap-1 text-center">
                             <div className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)] shrink-0" />
-                            <div>
+                            <div className="text-center">
                                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest opacity-70">Principal</p>
-                               <p className="text-sm font-black text-white italic tracking-tight">{player.main_position}</p>
+                                <p className="text-sm font-black text-white italic tracking-tight">{currentMainPosition}</p>
                             </div>
                          </div>
-                         {(player.secondary_positions || []).filter(Boolean).map((pos, i) => (
-                           <div key={i} className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)] shrink-0" />
-                              <div>
-                                 <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest opacity-70">{i === 0 ? '2ª Posición' : '3ª Posición'}</p>
-                                 <p className="text-sm font-black text-amber-300 italic tracking-tight">{pos}</p>
+                          {[0, 1].map((index) => {
+                            const pos = currentSecondaryPositions.filter(Boolean)[index];
+                            return (
+                              <div key={index} className="min-w-0 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl shadow-inner flex flex-col items-center justify-center gap-1 text-center">
+                                <div className={cn("w-2.5 h-2.5 rounded-full shrink-0", pos ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)]" : "bg-slate-700")} />
+                                <div className="min-w-0 text-center">
+                                  <p className={cn("text-[8px] font-black uppercase tracking-wider whitespace-nowrap", pos ? "text-amber-400" : "text-slate-600")}>{index + 2}ª Posición</p>
+                                  <p className={cn("text-xs font-black italic tracking-tight truncate", pos ? "text-amber-300" : "text-slate-600")}>{pos || '—'}</p>
+                                </div>
                               </div>
-                           </div>
-                         ))}
-                         {(player.secondary_positions || []).filter(Boolean).length === 0 && (
-                           <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-3xl shadow-inner">
-                              <p className="text-xs text-slate-600 italic">Sin posiciones secundarias</p>
-                           </div>
-                         )}
+                            );
+                          })}
                       </div>
                    </div>
                 </div>
@@ -1483,7 +1787,7 @@ export function PlayerDetail({
                     {
                       label: 'Encaje en el Club',
                       value: formData.rating_club_fit,
-                      sub: 'Adecuación al proyecto',
+                      sub: 'Calculado según el modelo del club',
                       color: 'text-blue-400',
                       bar: 'bg-blue-400',
                     },
@@ -1572,19 +1876,18 @@ export function PlayerDetail({
                   {/* Potencial y Encaje */}
                   <div>
                     <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest px-1 mb-2">
-                      Proyección y encaje
+                      Proyección
                     </p>
-                    <div className="grid grid-cols-2 gap-4 md:w-1/2">
+                    <div className="grid grid-cols-1 gap-4 md:w-1/2">
                       {renderRatingField('Potencial Estimado', 'rating_potential')}
-                      {renderRatingField('Encaje en el Club',  'rating_club_fit')}
                     </div>
                   </div>
                 </div>
 
                 {/* Analysis Text Blocks */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                   {renderTextAreaField('Fortalezas', 'technical_profile', 'Análisis de virtudes técnicas/tácticas...')}
-                   {renderTextAreaField('Debilidades', 'tactical_profile', 'Aspectos a corregir o mejorar...')}
+                   {renderTextAreaField('Informe Técnico', 'technical_profile', 'Lectura técnica detallada del jugador...')}
+                   {renderTextAreaField('Informe Táctico', 'tactical_profile', 'Lectura táctica y comportamiento en juego...')}
                    {renderTextAreaField('Talento Diferencial', 'differential_talent', '¿Qué lo hace único en su categoría?')}
                    {renderTextAreaField('Riesgos Detectados', 'risks_analysis', 'Posibles frenos en su evolución (lesiones, entorno, carácter)...')}
                    {renderTextAreaField('Margen de Mejora', 'improvement_margin')}
@@ -1599,20 +1902,28 @@ export function PlayerDetail({
 
             {activeTab === 'informes' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-xs font-black text-white uppercase tracking-widest">Informes Registrados</h3>
-                   <button onClick={onCreateReport} className="text-[10px] font-black text-emerald-500 uppercase hover:text-emerald-400">Ver Detalles</button>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest">Informes Registrados</h3>
+                  <button onClick={() => onCreateReport('COMPLETE')} className="text-[10px] font-black text-emerald-500 uppercase hover:text-emerald-400">Nuevo</button>
                 </div>
+                {reports.length === 0 && (
+                  <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 text-center">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Sin informes registrados</p>
+                  </div>
+                )}
                 {reports.map((report) => (
-                  <div key={report.id} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex items-center justify-between group hover:border-emerald-500/30 transition-all cursor-pointer">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center font-black text-emerald-500 text-xl">{report.match_rating}</div>
-                      <div>
-                        <p className="font-bold text-white text-sm">Observador: Principal</p>
-                        <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">{format(new Date(report.report_date), "dd MMMM yyyy", { locale: es })}</p>
+                  <div key={report.id} onClick={() => onEditReport?.(report)} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 sm:p-5 flex items-center gap-3 justify-between group hover:border-emerald-500/30 transition-all cursor-pointer">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center font-black text-emerald-500 text-lg sm:text-xl shrink-0">{report.match_rating}</div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-white text-xs sm:text-sm truncate">Scout Principal</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-widest">{format(new Date(report.report_date), "dd MMM yyyy", { locale: es })}</p>
+                        {report.recommendation && (
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-slate-800 text-[8px] font-black text-slate-300 uppercase rounded">{report.recommendation}</span>
+                        )}
                       </div>
                     </div>
-                    <ChevronRight size={18} className="text-slate-700 group-hover:text-emerald-500 transition-all" />
+                    <ChevronRight size={16} className="text-slate-700 group-hover:text-emerald-500 transition-all shrink-0" />
                   </div>
                 ))}
               </div>
@@ -1757,93 +2068,405 @@ export function PlayerDetail({
               </div>
             )}
 
-            {activeTab === 'seguimiento' && (
-              <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-8">
-                 <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><TrendingUp size={16}/> Historial Seguimiento</h3>
-                 <div className="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-0 before:w-px before:bg-slate-800">
+            {activeTab === 'actividad' && (
+              <div className="space-y-6">
+                {/* — Seguimiento — */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-8">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <TrendingUp size={14} className="text-emerald-500 shrink-0" /> Notas de Seguimiento
+                  </h3>
+                  <div className="space-y-6 relative before:absolute before:left-[10px] before:top-2 before:bottom-0 before:w-px before:bg-slate-800">
                     {(player.tracking_history || [
                       { date: new Date().toISOString(), note: 'Añadido inicialmente al radar tras observar potencial en partido de liga.', status: 'TRACKING' }
                     ]).map((h, i) => (
-                       <div key={i} className="flex gap-6 relative">
-                          <div className={cn("w-[23px] h-[23px] rounded-full border-4 border-slate-950 shrink-0 z-10", getTrafficLightColor(h.status))} />
-                          <div className="space-y-2">
-                             <div className="flex items-center gap-3">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{format(new Date(h.date), "dd MMM yyyy", { locale: es })}</span>
-                                <span className="px-2 py-0.5 rounded bg-slate-800 text-[8px] font-bold text-slate-300 uppercase">{h.status}</span>
-                             </div>
-                             <p className="text-sm font-medium text-slate-200 leading-relaxed italic">"{h.note}"</p>
+                      <div key={i} className="flex gap-4 relative min-w-0">
+                        <div className={cn("w-5 h-5 rounded-full border-4 border-slate-950 shrink-0 z-10 mt-0.5", getTrafficLightColor(h.status))} />
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{format(new Date(h.date), "dd MMM yyyy", { locale: es })}</span>
+                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[8px] font-bold text-slate-300 uppercase">{h.status}</span>
                           </div>
-                       </div>
+                          <p className="text-xs font-medium text-slate-200 leading-relaxed italic break-words">"{h.note}"</p>
+                        </div>
+                      </div>
                     ))}
-                 </div>
+                  </div>
+                </div>
+
+                {/* — Historial de cambios — */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-8">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <History size={14} className="text-slate-400 shrink-0" /> Historial de Cambios
+                  </h3>
+                  {history.length > 0 ? (
+                    <div className="space-y-3">
+                      {history.map((entry) => (
+                        <div key={entry.id} className="flex items-start gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 min-w-0">
+                          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center shrink-0">
+                            <MousePointer2 size={14} className="text-slate-500" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-200 break-words">
+                              Se actualizó <span className="text-emerald-400">{entry.field}</span>
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 break-words">
+                              <span className="text-slate-600">{entry.old_value || 'vacío'}</span>
+                              <span className="mx-1 text-slate-600">→</span>
+                              <span>{entry.new_value || 'vacío'}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-600 mt-1 uppercase tracking-widest">
+                              {format(new Date(entry.created_at), "dd MMM yyyy · HH:mm", { locale: es })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                      <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center shrink-0">
+                        <MousePointer2 size={14} className="text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400">Todavía no hay cambios registrados</p>
+                        <p className="text-[10px] text-slate-600 mt-0.5">Aparecerán aquí cuando guardes cambios del perfil</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {activeTab === 'decision' && (
-              <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-8 max-w-2xl mx-auto text-center space-y-8">
-                <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto text-emerald-500">
-                   <Gavel size={40} />
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-8 max-w-2xl mx-auto text-center space-y-6">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto text-emerald-500">
+                  <Gavel size={32} />
                 </div>
                 <div>
-                   <h3 className="text-2xl font-black text-white uppercase italic italic tracking-tighter">Decisión del Club</h3>
-                   <p className="text-slate-500 text-sm mt-2 font-bold">Evaluación final para la toma de decisiones ejecutivas</p>
+                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tighter">Decisión del Club</h3>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-2 font-bold">Evaluación final para la toma de decisiones ejecutivas</p>
                 </div>
-                
-                <div className="p-8 bg-slate-950/50 border border-slate-800 rounded-3xl space-y-6">
-                   <div className="flex items-center justify-between text-left">
-                      <div>
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Estado Final Candidato</p>
-                        <p className="text-lg font-black text-emerald-500 uppercase mt-1 italic italic truncate">{player.decision_final || 'OBSERVACIÓN CONTINUA'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Fecha Estimada</p>
-                        <p className="text-sm font-bold text-white mt-1 italic">{player.decision_date || 'PRÓXIMO MERCADO'}</p>
-                      </div>
-                   </div>
-                   <button className="w-full py-4 bg-emerald-600 text-slate-950 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg active:scale-95">RECOMENDAR FICHAJE</button>
-                   <button className="w-full py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:text-white transition-all">POSPONER DECISIÓN</button>
+
+                <div className="p-5 sm:p-8 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-left">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Estado Final Candidato</p>
+                      <p className="text-base font-black text-emerald-500 uppercase mt-1 italic break-words">{player.decision_final || 'OBSERVACIÓN CONTINUA'}</p>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Fecha Estimada</p>
+                      <p className="text-sm font-bold text-white mt-1 italic">{player.decision_date || 'PRÓXIMO MERCADO'}</p>
+                    </div>
+                  </div>
+                  <button className="w-full py-4 bg-emerald-600 text-slate-950 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg active:scale-95">RECOMENDAR FICHAJE</button>
+                  <button className="w-full py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:text-white transition-all">POSPONER DECISIÓN</button>
                 </div>
               </div>
             )}
 
-            {activeTab === 'historial' && (
-              <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-8">
-                 <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2"><History size={16}/> Historial de Cambios</h3>
-                 {history.length > 0 && (
-                   <div className="grid grid-cols-1 gap-4 mb-4">
-                      {history.map((entry) => (
-                        <div key={entry.id} className="flex items-start gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                           <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center shrink-0"><MousePointer2 size={16}/></div>
-                           <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-200 break-words">Se actualizÃ³ <span className="text-emerald-400">{entry.field}</span></p>
-                              <p className="text-[11px] text-slate-400 mt-1 break-words">{entry.old_value || 'vacÃ­o'} {' -> '} {entry.new_value || 'vacÃ­o'}</p>
-                              <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest">{format(new Date(entry.created_at), "dd MMMM yyyy - HH:mm", { locale: es })}</p>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                 )}
-                 <div className={cn("grid grid-cols-1 gap-4 opacity-50", history.length > 0 && "hidden")}>
-                    <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                       <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center"><MousePointer2 size={16}/></div>
-                       <div>
-                          <p className="text-xs font-bold text-slate-200">TodavÃ­a no hay cambios registrados para este jugador</p>
-                          <p className="text-[10px] text-slate-500">El historial aparecerÃ¡ aquÃ­ cuando guardes cambios del perfil</p>
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                       <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center"><User size={16}/></div>
-                       <div>
-                          <p className="text-xs font-bold text-slate-200">Nuevo informe añadido por Scout #3</p>
-                          <p className="text-[10px] text-slate-500">18 MAYO 2024 - 09:12</p>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-            )}
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {showCareerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-slate-700 bg-slate-900 p-6 shadow-2xl md:p-8">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div><p className="text-[9px] font-black uppercase tracking-[0.25em] text-emerald-500">Trayectoria</p><h2 className="mt-1 text-xl font-black uppercase italic text-white">{careerForm.id ? 'Editar temporada' : 'Añadir temporada'}</h2></div>
+              <button onClick={() => setShowCareerModal(false)} className="rounded-xl border border-slate-700 bg-slate-950 p-2 text-slate-500 hover:text-white"><XCircle size={18} /></button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="space-y-2"><span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Club</span><select value={careerForm.club_id} onChange={event => setCareerForm(prev => ({ ...prev, club_id: event.target.value, new_club_name: event.target.value ? '' : prev.new_club_name }))} className="input-base"><option value="">+ Insertar nuevo club</option>{careerClubs.map(club => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
+              {!careerForm.club_id && <label className="space-y-2"><span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">Nombre del nuevo club</span><input value={careerForm.new_club_name} onChange={event => setCareerForm(prev => ({ ...prev, new_club_name: event.target.value }))} className="input-base" placeholder="Ej. UD Santa Marina" /></label>}
+              {[
+                ['Temporada', 'season', 'Ej. 2025/2026'], ['Equipo', 'team', 'Ej. Juvenil A'],
+              ].map(([label, field, placeholder]) => <label className="space-y-2" key={field}><span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</span><input value={careerForm[field as keyof CareerFormData] as string} onChange={event => setCareerForm(prev => ({ ...prev, [field]: event.target.value }))} className="input-base" placeholder={placeholder} /></label>)}
+              <label className="space-y-2">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Categoría</span>
+                <select value={careerForm.category} onChange={event => setCareerForm(prev => ({ ...prev, category: event.target.value }))} className="input-base">
+                  <option value="">Seleccionar categoría...</option>
+                  {CAREER_CATEGORY_OPTIONS.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+              <label className="space-y-2"><span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Competición</span><input value={careerForm.competition} onChange={event => setCareerForm(prev => ({ ...prev, competition: event.target.value }))} className="input-base" placeholder="Ej. División de Honor" /></label>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {[
+                ['Partidos jugados', 'matches_played'], ['Minutos jugados', 'minutes_played'], ['Goles', 'goals'],
+                ['Tarjetas amarillas', 'yellow_cards'], ['Tarjetas rojas', 'red_cards'],
+              ].map(([label, field]) => <label className="space-y-2" key={field}><span className="block min-h-7 text-[8px] font-black uppercase tracking-wider text-slate-500">{label}</span><input type="number" min="0" value={careerForm[field as keyof CareerFormData] as number} onChange={event => setCareerForm(prev => ({ ...prev, [field]: Math.max(0, Number(event.target.value)) }))} className="input-base text-center" /></label>)}
+            </div>
+
+            {careerError && <p className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-bold text-rose-400">{careerError}</p>}
+            <div className="mt-6 flex justify-end gap-3"><button onClick={() => setShowCareerModal(false)} className="btn-ghost">Cancelar</button><button onClick={saveCareerEntry} disabled={savingCareer} className="btn-primary">{savingCareer ? 'Guardando...' : 'Guardar trayectoria'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showPrintSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6 shadow-2xl md:p-8">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.25em] text-emerald-500">Exportación PDF</p>
+                <h2 className="mt-1 text-xl font-black uppercase italic text-white">¿Qué quieres imprimir?</h2>
+                <p className="mt-2 text-xs text-slate-500">Selecciona el documento que quieres generar para este jugador.</p>
+              </div>
+              <button onClick={() => setShowPrintSelector(false)} className="rounded-xl border border-slate-700 bg-slate-950 p-2 text-slate-500 hover:text-white"><XCircle size={18} /></button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {([
+                { mode: 'summary', title: 'Resumen', description: 'Resumen ejecutivo y decisión principal.', icon: Target },
+                { mode: 'scouting', title: 'Ficha Scouting', description: 'Trayectoria, demarcación y todos los atributos.', icon: LayoutDashboard },
+                { mode: 'data', title: 'Datos', description: 'Información completa de filiación y registro.', icon: Info },
+                { mode: 'profile', title: 'Perfil Futbolístico', description: 'Valoraciones globales y análisis cualitativo.', icon: Zap },
+                { mode: 'complete', title: 'Informe Completo', description: 'Resumen, Ficha, Datos y Perfil; una hoja por pestaña.', icon: ClipboardList },
+              ] as const).map(option => (
+                <button
+                  key={option.mode}
+                  onClick={() => handlePrintReport(option.mode)}
+                  className="group flex min-h-[108px] items-start gap-4 rounded-2xl border border-slate-700/80 bg-slate-950/60 p-5 text-left transition-all hover:border-emerald-500/60 hover:bg-emerald-500/5"
+                >
+                  <span className="rounded-xl bg-emerald-500/10 p-3 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-slate-950"><option.icon size={20} /></span>
+                  <span><strong className="block text-sm font-black uppercase text-white">{option.title}</strong><small className="mt-1.5 block text-[10px] leading-relaxed text-slate-500">{option.description}</small></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canPrintReport && createPortal((
+        <article className="player-pdf-report" aria-hidden="true">
+          <header className="pdf-header">
+            <div>
+              <p className="pdf-kicker">Departamento de Scouting</p>
+              <h1>{printMode === 'summary' ? 'Resumen' : printMode === 'data' ? 'Datos del jugador' : printMode === 'scouting' ? 'Ficha Scouting' : printMode === 'profile' ? 'Perfil Futbolístico' : 'Informe completo'}</h1>
+              <p className="pdf-date">Generado el {format(new Date(), 'dd/MM/yyyy')}</p>
+            </div>
+            <div className="pdf-confidential">Uso interno · Confidencial</div>
+          </header>
+
+          {(printMode === 'summary' || printMode === 'complete') && (
+            <section className="pdf-mode-page">
+              <div className="pdf-player-hero">
+                <div className="pdf-player-photo">{printablePlayer.avatar_url ? <img src={printablePlayer.avatar_url} alt="" /> : <span>{printablePlayer.full_name[0]}</span>}</div>
+                <div className="pdf-player-title"><span className="pdf-section-label">Resumen ejecutivo</span><h2>{printablePlayer.full_name}</h2><p>{printablePlayer.club_name || 'Club no registrado'} · {currentMainPosition}</p></div>
+                <div className="pdf-status"><span>Estado actual</span><strong>{PLAYER_STATUS_OPTIONS.find(option => option.value === currentStatus)?.label || currentStatus}</strong></div>
+              </div>
+              <div className="pdf-summary-grid">
+                {[
+                  ['Por qué nos interesa', printablePlayer.why_interested],
+                  ['Fortaleza principal', printablePlayer.main_strength],
+                  ['Duda principal', printablePlayer.main_doubt],
+                  ['Talento diferencial', printablePlayer.differential_talent],
+                  ['Encaje en el club', formatClubFitDisplay(printablePlayer)],
+                  ['Próximo paso', printablePlayer.next_step],
+                ].map(([label, value]) => <div className="pdf-analysis" key={label as string}><span>{label}</span><p>{value || 'Sin información registrada.'}</p></div>)}
+              </div>
+              <div className="pdf-list-columns">
+                <div><span>Fortalezas</span><ul>{(printablePlayer.strengths || []).length ? printablePlayer.strengths?.map((item, index) => <li key={index}>{item}</li>) : <li>Sin fortalezas registradas.</li>}</ul></div>
+                <div><span>Debilidades</span><ul>{(printablePlayer.weaknesses || []).length ? printablePlayer.weaknesses?.map((item, index) => <li key={index}>{item}</li>) : <li>Sin debilidades registradas.</li>}</ul></div>
+                <div className="pdf-risk-box"><span>Riesgo de captación</span><strong>{getRiskLabel(printablePlayer.risk_level).label}</strong></div>
+              </div>
+            </section>
+          )}
+
+          {printMode === 'data' && (
+            <section className="pdf-mode-page">
+              <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
+              <div className="pdf-full-data-grid">
+                {[
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', printablePlayer.short_name],
+                  ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
+                  ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
+                  ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],
+                  ['Agente', printablePlayer.agent_name], ['Pasaporte', printablePlayer.passport], ['Fuente', printablePlayer.info_source || printablePlayer.source], ['Zona', printablePlayer.area],
+                  ['Contacto propio', printablePlayer.contact_own], ['Contacto tutor', printablePlayer.contact_tutor1], ['Rol tutor', printablePlayer.contact_tutor1_role], ['Otro contacto', printablePlayer.contact_other],
+                ].map(([label, value]) => <div key={label as string}><span>{label}</span><strong>{value || '—'}</strong></div>)}
+              </div>
+              <div className="pdf-analysis pdf-data-observations"><span>Observaciones generales</span><p>{printablePlayer.general_observations || 'Sin observaciones registradas.'}</p></div>
+            </section>
+          )}
+
+          {(printMode === 'scouting' || printMode === 'complete') && (
+          <div className={cn('pdf-mode-page pdf-scouting-page', printMode === 'complete' && 'pdf-new-page')}>
+          <section className="pdf-player-hero">
+            <div className="pdf-player-photo">
+              {printablePlayer.avatar_url ? <img src={printablePlayer.avatar_url} alt="" /> : <span>{printablePlayer.full_name[0]}</span>}
+            </div>
+            <div className="pdf-player-title">
+              <span className="pdf-section-label">Ficha de identificación</span>
+              <h2>{printablePlayer.full_name}</h2>
+              <p>{printablePlayer.club_name || 'Club no registrado'} · {currentMainPosition} · {calculateCategory(printablePlayer.birth_year, printablePlayer.birth_date)}</p>
+            </div>
+            <div className="pdf-status">
+              <span>Estado actual</span>
+              <strong>{PLAYER_STATUS_OPTIONS.find(option => option.value === currentStatus)?.label || currentStatus}</strong>
+            </div>
+          </section>
+
+          <section className="pdf-top-grid">
+            <div className="pdf-card pdf-data-card">
+              <div className="pdf-card-heading"><span>Datos principales</span><small>Perfil</small></div>
+              <div className="pdf-data-grid">
+                {[
+                  ['Nombre corto', printablePlayer.short_name || printablePlayer.first_name],
+                  ['Competición', printablePlayer.league || printablePlayer.competition],
+                  ['Nacimiento', printablePlayer.birth_date || printablePlayer.birth_year],
+                  ['Edad', printablePlayer.calculated_age ? `${printablePlayer.calculated_age} años` : '—'],
+                  ['Nacionalidad', printablePlayer.nationality],
+                  ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot],
+                  ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : '—'],
+                  ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : '—'],
+                ].map(([label, value]) => (
+                  <div key={label as string}><span>{label}</span><strong>{value || '—'}</strong></div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pdf-card pdf-position-card">
+              <div className="pdf-card-heading"><span>Demarcación</span><small>Mapa posicional</small></div>
+              <PitchMap position={currentMainPosition} secondaryPositions={currentSecondaryPositions} className="pdf-print-pitch" />
+              <div className="pdf-position-labels">
+                <strong>Principal: {currentMainPosition}</strong>
+                <span>Secundarias: {currentSecondaryPositions.filter(Boolean).join(' · ') || 'Sin registrar'}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="pdf-card pdf-trajectory-card">
+            <div className="pdf-card-heading"><span>Trayectoria</span><small>Historial competitivo</small></div>
+            {careerEntries.length > 0 ? (
+              <table className="pdf-trajectory-table">
+                <thead><tr><th>Temporada</th><th>Club</th><th>Equipo</th><th>Categoría</th><th>Competición</th><th>PJ</th><th>Min.</th><th>Goles</th><th>TA</th><th>TR</th></tr></thead>
+                <tbody>
+                  {careerEntries.map((entry, index) => (
+                    <tr key={index}>
+                      <td>{entry.season}</td><td>{entry.club_name_snapshot || careerClubs.find(club => club.id === entry.club_id)?.name || '—'}</td><td>{entry.team}</td><td>{entry.category}</td><td>{entry.competition || '—'}</td>
+                      <td>{entry.matches_played}</td><td>{entry.minutes_played ?? entry.minutes ?? 0}</td><td>{entry.goals}</td><td>{entry.yellow_cards}</td><td>{entry.red_cards}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p className="pdf-empty">Sin trayectoria registrada.</p>}
+          </section>
+
+          <section className="pdf-characteristics">
+            <div className="pdf-characteristics-title">
+              <div><span>Ficha Scouting</span><h3>Valoración de características</h3></div>
+              <small>Escala 1–5</small>
+            </div>
+
+            {currentMainPosition === 'POR' && (
+              <div className="pdf-rating-groups pdf-gk-groups">
+                {Object.entries(GK_RATING_CATEGORIES).map(([categoryId, category]) => (
+                  <div className="pdf-rating-group" key={categoryId}>
+                    <h4>{category.label}</h4>
+                    {category.attrs.map(attribute => {
+                      const value = Number(printablePlayer[attribute.field as keyof Player]) || 0;
+                      return (
+                        <div className="pdf-attribute" key={attribute.field}>
+                          <div><span>{attribute.label}</span><strong>{value || '—'}</strong></div>
+                          <div className="pdf-rating-track"><i style={{ width: `${value * 20}%` }} /></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="pdf-rating-groups">
+              {Object.entries(RATING_CATEGORIES).map(([categoryId, attributes]) => (
+                <div className="pdf-rating-group" key={categoryId}>
+                  <h4>{categoryId}</h4>
+                  {attributes.map(attribute => {
+                    const value = Number(printablePlayer[attribute.field as keyof Player]) || 0;
+                    return (
+                      <div className="pdf-attribute" key={attribute.field}>
+                        <div><span>{attribute.label}</span><strong>{value || '—'}</strong></div>
+                        <div className="pdf-rating-track"><i style={{ width: `${value * 20}%` }} /></div>
+                      </div>
+                    );
+                  })}
+                  {categoryId === 'especificas' && (printablePlayer.custom_ratings || []).map((rating, index) => (
+                    <div className="pdf-attribute" key={`${rating.label}-${index}`}>
+                      <div><span>{rating.label}</span><strong>{rating.value || '—'}</strong></div>
+                      <div className="pdf-rating-track"><i style={{ width: `${rating.value * 20}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="pdf-radars-page">
+            <div className="pdf-characteristics-title" style={{ marginTop: '5mm' }}>
+              <div><span>Ficha Scouting</span><h3>Radares de atributos</h3></div>
+              <small>Perfil por áreas · Escala 1–5</small>
+            </div>
+            <div className="pdf-radars-grid">
+              <PrintableRadar title="Físicas" attributes={RATING_CATEGORIES.fisicas} player={printablePlayer} color="#059669" />
+              <PrintableRadar title="Técnicas" attributes={RATING_CATEGORIES.tecnicas} player={printablePlayer} color="#2563eb" />
+              <PrintableRadar title="Tácticas" attributes={RATING_CATEGORIES.tacticas} player={printablePlayer} color="#7c3aed" />
+              <PrintableRadar title="Cognitivas" attributes={RATING_CATEGORIES.cognitivas} player={printablePlayer} color="#d97706" />
+            </div>
+          </section>
+          </div>
+          )}
+
+          {printMode === 'complete' && (
+            <section className="pdf-mode-page pdf-new-page">
+              <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
+              <div className="pdf-full-data-grid">
+                {[
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', printablePlayer.short_name],
+                  ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
+                  ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
+                  ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],
+                  ['Agente', printablePlayer.agent_name], ['Pasaporte', printablePlayer.passport], ['Fuente', printablePlayer.info_source || printablePlayer.source], ['Zona', printablePlayer.area],
+                  ['Contacto propio', printablePlayer.contact_own], ['Contacto tutor', printablePlayer.contact_tutor1], ['Rol tutor', printablePlayer.contact_tutor1_role], ['Otro contacto', printablePlayer.contact_other],
+                ].map(([label, value]) => <div key={label as string}><span>{label}</span><strong>{value || '—'}</strong></div>)}
+              </div>
+              <div className="pdf-analysis pdf-data-observations"><span>Observaciones generales</span><p>{printablePlayer.general_observations || 'Sin observaciones registradas.'}</p></div>
+            </section>
+          )}
+
+          {(printMode === 'profile' || printMode === 'complete') && (
+            <section className={cn('pdf-mode-page', printMode === 'complete' && 'pdf-new-page')}>
+              <div className="pdf-characteristics-title"><div><span>Perfil futbolístico</span><h3>Análisis del jugador</h3></div><small>Valoración global y cualitativa</small></div>
+              <div className="pdf-profile-ratings">
+                {[
+                  ['Físico', printablePlayer.rating_physical], ['Técnica', printablePlayer.rating_technical],
+                  ['Táctica', printablePlayer.rating_tactical], ['Cognitivas', printablePlayer.rating_mental],
+                  ['Competitividad', printablePlayer.rating_competitive], ['Decisiones', printablePlayer.rating_decision_making],
+                  ['Ritmo', printablePlayer.rating_pace], ['Inteligencia', printablePlayer.rating_intelligence],
+                  ['Potencial', printablePlayer.rating_potential], ['Encaje club', printablePlayer.rating_club_fit],
+                ].map(([label, raw]) => {
+                  const value = Number(raw) || 0;
+                  return <div className="pdf-profile-rating" key={label as string}><span>{label}</span><strong>{value ? value.toFixed(1) : '—'}</strong><div className="pdf-rating-track"><i style={{ width: `${value * 20}%` }} /></div></div>;
+                })}
+              </div>
+              <div className="pdf-summary-grid pdf-profile-analysis">
+                {[
+                  ['Informe técnico', printablePlayer.technical_profile], ['Informe táctico', printablePlayer.tactical_profile],
+                  ['Talento diferencial', printablePlayer.differential_talent], ['Riesgos detectados', printablePlayer.risks_analysis],
+                  ['Margen de mejora', printablePlayer.improvement_margin], ['Tipo de jugador', printablePlayer.player_type],
+                  ['Rol ideal', printablePlayer.ideal_role], ['Nivel actual para el club', printablePlayer.current_level_club],
+                  ['Nivel futuro estimado', printablePlayer.future_level_estimated], ['Comparativa', printablePlayer.comparison_players],
+                ].map(([label, value]) => <div className="pdf-analysis" key={label as string}><span>{label}</span><p>{value || 'Sin información registrada.'}</p></div>)}
+              </div>
+            </section>
+          )}
+
+          <footer className="pdf-footer">
+            <span>{printablePlayer.full_name} · {printMode === 'complete' ? 'Informe completo' : 'Documento de scouting'}</span>
+            <span>Documento confidencial</span>
+          </footer>
+        </article>
+      ), document.body)}
 
 
       {/* MODAL AÑADIR VÍDEO */}

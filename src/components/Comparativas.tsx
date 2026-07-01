@@ -4,7 +4,8 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Swords, BarChart2, ChevronDown, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Search, Swords, BarChart2, ChevronDown, X, Printer } from 'lucide-react';
 import { Player } from '../types';
 import { calculateCategory, cn, sortCategories } from '../lib/utils';
 
@@ -79,13 +80,63 @@ const AREAS = {
 
 type AreaKey = keyof typeof AREAS;
 
+const GK_AREAS = {
+  gk_bajo_palos: {
+    label: 'BAJO PALOS',
+    color: '#06b6d4',
+    attrs: [
+      { label: 'Reflejos',              field: 'rating_velo_reac'   },
+      { label: 'Agilidad bajo palos',   field: 'rating_agil'        },
+      { label: 'Colocación / posición', field: 'rating_posic'       },
+      { label: 'Potencia de salto',     field: 'rating_poten'       },
+      { label: 'Coordinación',          field: 'rating_coord'       },
+    ],
+  },
+  gk_con_balon: {
+    label: 'CON EL BALÓN',
+    color: '#60a5fa',
+    attrs: [
+      { label: 'Juego pie (corto)',       field: 'rating_pase_corto'   },
+      { label: 'Saque largo / distrib.',  field: 'rating_pase_largo'   },
+      { label: 'Control / amortiguación', field: 'rating_ctrl_balon'   },
+      { label: 'Despeje / puñetazo',      field: 'rating_despeje'      },
+      { label: 'Pierna no dominante',     field: 'rating_pierna_menos' },
+    ],
+  },
+  gk_salidas: {
+    label: 'SALIDAS Y AÉREO',
+    color: '#a78bfa',
+    attrs: [
+      { label: 'Dominio del área',        field: 'rating_juego_aereo'  },
+      { label: 'Lectura de salidas',      field: 'rating_dom_espacios' },
+      { label: 'Posición en 1vs1',        field: 'rating_marcajes'     },
+      { label: 'Fortaleza en choques',    field: 'rating_fuerza'       },
+      { label: 'Resistencia / concentr.', field: 'rating_resis'        },
+    ],
+  },
+  gk_mental: {
+    label: 'MENTAL Y LIDERAZGO',
+    color: '#fbbf24',
+    attrs: [
+      { label: 'Liderazgo defensivo', field: 'rating_liderazgo'    },
+      { label: 'Comunicación',        field: 'rating_comunicacion' },
+      { label: 'Mentalidad / foco',   field: 'rating_mentalidad'   },
+      { label: 'Competitividad',      field: 'rating_competitiv'   },
+      { label: 'Personalidad',        field: 'rating_personalidad' },
+    ],
+  },
+} as const;
+
+type GKAreaKey = keyof typeof GK_AREAS;
+
 const COLOR_A = { stroke: '#60a5fa', fill: 'rgba(96,165,250,0.28)',  badge: '#1e3a5f', text: '#93c5fd' };
 const COLOR_B = { stroke: '#fb7185', fill: 'rgba(251,113,133,0.25)', badge: '#4c0519', text: '#fda4af' };
 
 // ── Radar superpuesto ────────────────────────────────────────────────────────
 
-function CompareRadar({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player | null; key?: string }) {
-  const area  = AREAS[areaKey];
+type GenericArea = { label: string; color: string; attrs: ReadonlyArray<{ label: string; field: string }> };
+
+function CompareRadar({ area, playerA, playerB }: { area: GenericArea; playerA: Player; playerB: Player | null; key?: string }) {
   const W = 460, H = 400;
   const cx = 230, cy = 200;
   const R = 108, RINGS = 5;
@@ -292,9 +343,7 @@ function DuelBar({ label, valA, valB }: { label: string; valA: number; valB: num
 
 // ── Sección de duelo por área ────────────────────────────────────────────────
 
-function DuelSection({ areaKey, playerA, playerB }: { areaKey: AreaKey; playerA: Player; playerB: Player; key?: string }) {
-  const area = AREAS[areaKey];
-
+function DuelSection({ area, playerA, playerB }: { area: GenericArea; playerA: Player; playerB: Player; key?: string }) {
   const getVal = (p: Player, field: string) =>
     Number((p as unknown as Record<string, unknown>)[field]) || 0;
 
@@ -421,7 +470,7 @@ function ProfileCompare({ playerA, playerB }: { playerA: Player; playerB: Player
     { label: 'Liga',         valA: playerA.league,                                valB: playerB.league,                                compareAs: 'none' },
     { label: 'Val. global',  valA: playerA.global_rating,                         valB: playerB.global_rating,                         compareAs: 'higher', isRating: true },
     { label: 'Potencial',    valA: playerA.potential_rating,                      valB: playerB.potential_rating,                      compareAs: 'higher', isRating: true },
-    { label: 'Encaje club',  valA: playerA.club_fit,                              valB: playerB.club_fit,                              compareAs: 'none' },
+    { label: 'Encaje club',  valA: playerA.rating_club_fit,                       valB: playerB.rating_club_fit,                       compareAs: 'higher', isRating: true },
   ];
 
   return (
@@ -604,7 +653,7 @@ function PlayerDropdown({
 function VSPlayerCard({ player, color, side }: { player: Player | null; color: string; side: 'left' | 'right' }) {
   if (!player) {
     return (
-      <div className={cn('flex-1 flex flex-col items-center justify-center py-6 rounded-2xl border border-dashed border-slate-800', side === 'right' && 'items-center')}>
+      <div className={cn('w-full flex-1 flex flex-col items-center justify-center py-6 rounded-2xl border border-dashed border-slate-800', side === 'right' && 'items-center')}>
         <p className="text-slate-600 text-xs font-bold italic">Sin jugador</p>
       </div>
     );
@@ -612,8 +661,8 @@ function VSPlayerCard({ player, color, side }: { player: Player | null; color: s
 
   return (
     <div className={cn(
-      'flex-1 flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border transition-all',
-      side === 'left' && 'flex-row-reverse',
+      'w-full flex-1 flex items-center justify-between gap-4 px-4 sm:px-5 py-4 rounded-2xl border transition-all',
+      side === 'left' ? 'flex-row-reverse sm:flex-row-reverse' : 'flex-row',
     )}
       style={{ borderColor: `${color}30`, background: `${color}08` }}>
       {player.avatar_url ? (
@@ -629,7 +678,9 @@ function VSPlayerCard({ player, color, side }: { player: Player | null; color: s
       )}
       <div className={cn(
         'min-w-0 flex-1 flex flex-col',
-        side === 'left' ? 'text-right items-end pr-6 md:pr-8' : 'text-left items-start pl-6 md:pl-8',
+        side === 'left'
+          ? 'text-right items-end pr-2 sm:pr-6 md:pr-8'
+          : 'text-left items-start pl-2 sm:pl-6 md:pl-8',
       )}>
         <p className="max-w-full text-base md:text-lg font-black text-white uppercase italic tracking-tight leading-tight whitespace-normal break-words">
           {player.full_name}
@@ -688,19 +739,360 @@ function GlobalScore({ playerA: pA, playerB: pB }: { playerA: Player; playerB: P
   );
 }
 
+// ── Componentes de impresión ─────────────────────────────────────────────────
+
+function PrintRadar({ area, playerA, playerB }: { area: GenericArea; playerA: Player; playerB: Player }) {
+  const W = 340, H = 300, cx = 170, cy = 148, R = 88, RINGS = 5;
+  const BADGE_R = R + 18, LABEL_R = R + 44;
+  const n = area.attrs.length;
+  const step = (2 * Math.PI) / n;
+  const start = -Math.PI / 2;
+  const pt = (a: number, r: number) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  const getVals = (p: Player) =>
+    area.attrs.map(attr => {
+      const raw = Number((p as unknown as Record<string, unknown>)[attr.field]) || 0;
+      return { raw, norm: raw / 5 };
+    });
+  const valsA = getVals(playerA);
+  const valsB = getVals(playerB);
+  const polyPts = (vals: typeof valsA) =>
+    vals.map((d, i) => {
+      const a = start + i * step;
+      return `${cx + d.norm * R * Math.cos(a)},${cy + d.norm * R * Math.sin(a)}`;
+    }).join(' ');
+  const anch = (a: number) => Math.cos(a) > 0.2 ? 'start' : Math.cos(a) < -0.2 ? 'end' : 'middle';
+
+  return (
+    <div className="cpdf-radar-card">
+      <div className="cpdf-radar-header" style={{ borderLeft: `3px solid ${area.color}` }}>
+        <span style={{ color: area.color }}>{area.label}</span>
+        <div className="cpdf-radar-legend">
+          <span style={{ color: '#60a5fa' }}>— {playerA.short_name || playerA.full_name.split(' ')[0]}</span>
+          <span style={{ color: '#fb7185', marginLeft: '4mm' }}>- - {playerB.short_name || playerB.full_name.split(' ')[0]}</span>
+        </div>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        {Array.from({ length: RINGS }).map((_, ri) => (
+          <circle key={ri} cx={cx} cy={cy} r={R * ((ri + 1) / RINGS)}
+            fill={ri % 2 === 0 ? '#f0f4f2' : 'transparent'}
+            stroke="#cdd9d5" strokeWidth={ri === RINGS - 1 ? 1.2 : 0.6} />
+        ))}
+        {area.attrs.map((_, i) => {
+          const a = start + i * step, o = pt(a, R);
+          return <line key={i} x1={cx} y1={cy} x2={o.x} y2={o.y} stroke="#cdd9d5" strokeWidth={0.8} />;
+        })}
+        {/* Polígono B */}
+        <polygon points={polyPts(valsB)} fill="rgba(251,113,133,0.12)" stroke="#fb7185" strokeWidth={1.5} strokeDasharray="4 2" strokeLinejoin="round" />
+        {/* Polígono A */}
+        <polygon points={polyPts(valsA)} fill="rgba(96,165,250,0.15)" stroke="#60a5fa" strokeWidth={2} strokeLinejoin="round" />
+        {/* Badges y etiquetas */}
+        {area.attrs.map((attr, i) => {
+          const a = start + i * step;
+          const bp = pt(a, BADGE_R), lp = pt(a, LABEL_R);
+          const ta = anch(a);
+          const valA = valsA[i].raw, valB = valsB[i].raw;
+          const BW = 18, BH = 10;
+          return (
+            <g key={i}>
+              <rect x={bp.x - BW / 2} y={bp.y - BH - 1} width={BW} height={BH} rx={2} fill="#dbeafe" />
+              <text x={bp.x} y={bp.y - 1 - BH * 0.25} textAnchor="middle" fill="#1d4ed8" fontSize={7} fontWeight="900">{valA || '–'}</text>
+              <rect x={bp.x - BW / 2} y={bp.y + 1} width={BW} height={BH} rx={2} fill="#ffe4e6" />
+              <text x={bp.x} y={bp.y + 1 + BH * 0.75} textAnchor="middle" fill="#be123c" fontSize={7} fontWeight="900">{valB || '–'}</text>
+              <text x={lp.x} y={lp.y} textAnchor={ta} fill="#374151" fontSize={7.5} fontWeight="700">
+                {attr.label.split(' ').length > 1 ? (
+                  <>
+                    <tspan x={lp.x} dy={Math.sin(a) < -0.3 ? '-0.6em' : '0em'}>{attr.label.split(' ')[0]}</tspan>
+                    <tspan x={lp.x} dy="1.1em">{attr.label.split(' ').slice(1).join(' ')}</tspan>
+                  </>
+                ) : (
+                  <tspan dy="-0.3em">{attr.label}</tspan>
+                )}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function PrintDuelSection({ area, playerA, playerB }: { area: GenericArea; playerA: Player; playerB: Player }) {
+  const getVal = (p: Player, field: string) =>
+    Number((p as unknown as Record<string, unknown>)[field]) || 0;
+  return (
+    <div className="cpdf-duel-section">
+      <div className="cpdf-duel-header" style={{ background: `${area.color}18`, borderLeft: `3px solid ${area.color}` }}>
+        <span style={{ color: area.color, fontWeight: 900, fontSize: '7pt', letterSpacing: '0.15em', textTransform: 'uppercase' }}>{area.label}</span>
+      </div>
+      {area.attrs.map(attr => {
+        const vA = getVal(playerA, attr.field);
+        const vB = getVal(playerB, attr.field);
+        const pA = Math.round((vA / 5) * 100);
+        const pB = Math.round((vB / 5) * 100);
+        const winA = pA > pB, winB = pB > pA;
+        return (
+          <div key={attr.field} className="cpdf-duel-row">
+            <div className="cpdf-duel-a">
+              <span style={{ color: winA ? '#1d4ed8' : '#6b7280', fontWeight: 900, fontSize: '7pt', minWidth: '18pt', textAlign: 'right' }}>{pA}</span>
+              <div className="cpdf-bar-track" style={{ direction: 'rtl' }}>
+                <div className="cpdf-bar-fill" style={{ width: `${pA}%`, background: winA ? '#60a5fa' : '#dbeafe' }} />
+              </div>
+            </div>
+            <span className="cpdf-attr-label">{attr.label}</span>
+            <div className="cpdf-duel-b">
+              <div className="cpdf-bar-track">
+                <div className="cpdf-bar-fill" style={{ width: `${pB}%`, background: winB ? '#fb7185' : '#ffe4e6' }} />
+              </div>
+              <span style={{ color: winB ? '#be123c' : '#6b7280', fontWeight: 900, fontSize: '7pt', minWidth: '18pt' }}>{pB}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ComparePrintArticleProps {
+  playerA: Player;
+  playerB: Player;
+  printType: 'barras' | 'radares';
+  isGK: boolean;
+}
+
+function ComparePrintArticle({ playerA, playerB, printType, isGK }: ComparePrintArticleProps) {
+  const date = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  const nameA = playerA.short_name || playerA.full_name;
+  const nameB = playerB.short_name || playerB.full_name;
+
+  const allAreas = isGK
+    ? [...Object.values(AREAS), ...Object.values(GK_AREAS)]
+    : Object.values(AREAS);
+
+  // Dominio global (todas las áreas relevantes)
+  let winsA = 0, winsB = 0;
+  for (const area of allAreas) {
+    for (const attr of area.attrs) {
+      const vA = Number((playerA as unknown as Record<string, unknown>)[attr.field]) || 0;
+      const vB = Number((playerB as unknown as Record<string, unknown>)[attr.field]) || 0;
+      if (vA > vB) winsA++;
+      else if (vB > vA) winsB++;
+    }
+  }
+  const total = winsA + winsB;
+  const pctA = total ? Math.round((winsA / total) * 100) : 50;
+
+  const STATUS_LABELS: Record<string, string> = {
+    NEW: 'Nuevo', PENDING_VALIDATION: 'Pend. Validación', VALIDATED: 'Validado',
+    TRACKING: 'Seguimiento', INTERESTING: 'Interesante', VERY_INTERESTING: 'Muy Interesante',
+    PRIORITY: 'Prioritario', CONTACTED: 'Contactado', ON_TRIAL: 'A prueba',
+    SIGNED: 'Fichado', DISCARDED: 'Descartado',
+  };
+
+  const profileRows = [
+    { label: 'Edad',         vA: playerA.calculated_age ? `${playerA.calculated_age} años` : '—', vB: playerB.calculated_age ? `${playerB.calculated_age} años` : '—' },
+    { label: 'Año Nac.',     vA: playerA.birth_year ?? '—', vB: playerB.birth_year ?? '—' },
+    { label: 'Posición',     vA: playerA.main_position ?? '—', vB: playerB.main_position ?? '—' },
+    { label: 'Club',         vA: playerA.club_name ?? '—', vB: playerB.club_name ?? '—' },
+    { label: 'Liga',         vA: playerA.league ?? '—', vB: playerB.league ?? '—' },
+    { label: 'Estado',       vA: STATUS_LABELS[playerA.status] ?? playerA.status ?? '—', vB: STATUS_LABELS[playerB.status] ?? playerB.status ?? '—' },
+    { label: 'Val. Global',  vA: playerA.global_rating ?? '—', vB: playerB.global_rating ?? '—', highlight: true },
+    { label: 'Potencial',    vA: playerA.potential_rating ?? '—', vB: playerB.potential_rating ?? '—', highlight: true },
+  ];
+
+  return (
+    <article className="compare-pdf-report" aria-hidden="true">
+      {/* Header */}
+      <header className="cpdf-header">
+        <div>
+          <p className="cpdf-kicker">U.D. Santa Mariña · Análisis Comparativo</p>
+          <h1 className="cpdf-title">INFORME DE ENFRENTAMIENTO</h1>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p className="cpdf-date">{date}</p>
+          <span className="cpdf-confidential">CONFIDENCIAL</span>
+        </div>
+      </header>
+
+      {/* VS Hero */}
+      <div className="cpdf-vs-hero">
+        {/* Jugador A */}
+        <div className="cpdf-vs-player cpdf-vs-player-a">
+          <div className="cpdf-vs-photo" style={{ borderColor: '#60a5fa' }}>
+            {playerA.avatar_url
+              ? <img src={playerA.avatar_url} alt={nameA} />
+              : <span style={{ color: '#60a5fa', fontWeight: 900, fontSize: '18pt', fontStyle: 'italic' }}>{playerA.full_name[0]}</span>
+            }
+          </div>
+          <div className="cpdf-vs-info cpdf-vs-info-a">
+            <p className="cpdf-vs-pos" style={{ color: '#60a5fa' }}>{playerA.main_position}</p>
+            <h2 className="cpdf-vs-name" style={{ color: '#1e3a8a' }}>{nameA.toUpperCase()}</h2>
+            {playerA.club_name && <p className="cpdf-vs-club">{playerA.club_name}{playerA.calculated_age ? ` · ${playerA.calculated_age}a` : ''}</p>}
+            {playerA.global_rating && (
+              <div className="cpdf-vs-rating" style={{ background: '#1d4ed820', borderColor: '#60a5fa' }}>
+                <span style={{ color: '#60a5fa' }}>GLOBAL</span>
+                <strong style={{ color: '#1d4ed8' }}>{playerA.global_rating}</strong>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* VS central */}
+        <div className="cpdf-vs-badge">VS</div>
+
+        {/* Jugador B */}
+        <div className="cpdf-vs-player cpdf-vs-player-b">
+          <div className="cpdf-vs-info cpdf-vs-info-b">
+            <p className="cpdf-vs-pos" style={{ color: '#fb7185' }}>{playerB.main_position}</p>
+            <h2 className="cpdf-vs-name" style={{ color: '#881337' }}>{nameB.toUpperCase()}</h2>
+            {playerB.club_name && <p className="cpdf-vs-club">{playerB.club_name}{playerB.calculated_age ? ` · ${playerB.calculated_age}a` : ''}</p>}
+            {playerB.global_rating && (
+              <div className="cpdf-vs-rating" style={{ background: '#be123c20', borderColor: '#fb7185' }}>
+                <span style={{ color: '#fb7185' }}>GLOBAL</span>
+                <strong style={{ color: '#be123c' }}>{playerB.global_rating}</strong>
+              </div>
+            )}
+          </div>
+          <div className="cpdf-vs-photo" style={{ borderColor: '#fb7185' }}>
+            {playerB.avatar_url
+              ? <img src={playerB.avatar_url} alt={nameB} />
+              : <span style={{ color: '#fb7185', fontWeight: 900, fontSize: '18pt', fontStyle: 'italic' }}>{playerB.full_name[0]}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Dominio global */}
+      <div className="cpdf-dominio">
+        <div className="cpdf-dominio-labels">
+          <span style={{ color: '#1d4ed8' }}>{nameA.split(' ')[0]} · {winsA} victorias · {pctA}%</span>
+          <span className="cpdf-dominio-title">DOMINIO GLOBAL · {total} ATRIBUTOS</span>
+          <span style={{ color: '#be123c' }}>{100 - pctA}% · {winsB} victorias · {nameB.split(' ')[0]}</span>
+        </div>
+        <div className="cpdf-dominio-bar">
+          <div style={{ width: `${pctA}%`, background: 'linear-gradient(to right, #3b82f6, #60a5fa)', height: '100%', borderRadius: '99px 0 0 99px' }} />
+          <div style={{ flex: 1, background: 'linear-gradient(to right, #fb7185, #f43f5e)', height: '100%', borderRadius: '0 99px 99px 0' }} />
+        </div>
+      </div>
+
+      {/* Tabla de perfil */}
+      <div className="cpdf-profile">
+        <div className="cpdf-profile-header">
+          <span>PERFIL COMPARADO</span>
+          <span style={{ color: '#60a5fa' }}>{nameA.split(' ')[0]}</span>
+          <span style={{ color: '#be123c' }}>{nameB.split(' ')[0]}</span>
+        </div>
+        {profileRows.map(row => (
+          <div key={row.label} className="cpdf-profile-row">
+            <span className="cpdf-profile-label">{row.label}</span>
+            <span className={`cpdf-profile-val ${row.highlight ? 'cpdf-val-highlight-a' : ''}`}>{String(row.vA)}</span>
+            <span className={`cpdf-profile-val ${row.highlight ? 'cpdf-val-highlight-b' : ''}`}>{String(row.vB)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Contenido: barras o radares */}
+      {printType === 'barras' ? (
+        <div className="cpdf-content">
+          <div className="cpdf-content-title">
+            <span>COMPARATIVA POR ÁREAS</span>
+            <div className="cpdf-legend">
+              <span style={{ color: '#1d4ed8' }}>■ {nameA.split(' ')[0]}</span>
+              <span style={{ color: '#be123c', marginLeft: '5mm' }}>■ {nameB.split(' ')[0]}</span>
+            </div>
+          </div>
+          <div className="cpdf-duel-grid">
+            {Object.values(AREAS).map((area, i) => (
+              <PrintDuelSection key={String(i)} area={area} playerA={playerA} playerB={playerB} />
+            ))}
+          </div>
+          {isGK && (
+            <>
+              <div className="cpdf-content-title" style={{ marginTop: '4mm' }}>
+                <span>ANÁLISIS ESPECÍFICO PORTERO</span>
+                <div className="cpdf-legend">
+                  <span style={{ color: '#1d4ed8' }}>■ {nameA.split(' ')[0]}</span>
+                  <span style={{ color: '#be123c', marginLeft: '5mm' }}>■ {nameB.split(' ')[0]}</span>
+                </div>
+              </div>
+              <div className="cpdf-duel-grid">
+                {Object.values(GK_AREAS).map((area, i) => (
+                  <PrintDuelSection key={String(i)} area={area} playerA={playerA} playerB={playerB} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="cpdf-content">
+          <div className="cpdf-content-title">
+            <span>RADARES COMPARATIVOS</span>
+            <div className="cpdf-legend">
+              <span style={{ color: '#1d4ed8' }}>— {nameA.split(' ')[0]}</span>
+              <span style={{ color: '#be123c', marginLeft: '5mm' }}>- - {nameB.split(' ')[0]}</span>
+            </div>
+          </div>
+          <div className="cpdf-radar-grid">
+            {Object.values(AREAS).map((area, i) => (
+              <PrintRadar key={String(i)} area={area} playerA={playerA} playerB={playerB} />
+            ))}
+          </div>
+          {isGK && (
+            <>
+              <div className="cpdf-content-title" style={{ marginTop: '4mm' }}>
+                <span>ANÁLISIS ESPECÍFICO PORTERO</span>
+                <div className="cpdf-legend">
+                  <span style={{ color: '#1d4ed8' }}>— {nameA.split(' ')[0]}</span>
+                  <span style={{ color: '#be123c', marginLeft: '5mm' }}>- - {nameB.split(' ')[0]}</span>
+                </div>
+              </div>
+              <div className="cpdf-radar-grid">
+                {Object.values(GK_AREAS).map((area, i) => (
+                  <PrintRadar key={String(i)} area={area} playerA={playerA} playerB={playerB} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <footer className="cpdf-footer">
+        <span>U.D. Santa Mariña · Dpto. de Scouting</span>
+        <span>Documento confidencial · {date}</span>
+      </footer>
+    </article>
+  );
+}
+
 // ── Vista principal Comparativas VS ─────────────────────────────────────────
 
 type Tab = 'radares' | 'duelo';
 
 interface ComparativasProps {
   players: Player[];
+  userRole?: string;
 }
 
-export function Comparativas({ players }: ComparativasProps) {
+export function Comparativas({ players, userRole }: ComparativasProps) {
   const [idA, setIdA] = useState<string>(players[0]?.id ?? '');
   const [idB, setIdB] = useState<string>(players[1]?.id ?? '');
   const [tab, setTab] = useState<Tab>('duelo');
   const [filterCats, setFilterCats] = useState<string[]>([]);
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [printType, setPrintType] = useState<'barras' | 'radares'>('barras');
+  const [printReady, setPrintReady] = useState(false);
+
+  const canPrint = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID'].includes(userRole || '');
+
+  const handlePrint = () => {
+    setShowPrintDialog(false);
+    setPrintReady(true);
+    requestAnimationFrame(() => {
+      document.body.classList.add('printing-compare-report');
+      window.print();
+      document.body.classList.remove('printing-compare-report');
+      setPrintReady(false);
+    });
+  };
   const getPlayerCategory = (player: Player) => calculateCategory(player.birth_year, player.birth_date);
 
   // Categorías únicas extraídas de los jugadores
@@ -717,6 +1109,7 @@ export function Comparativas({ players }: ComparativasProps) {
 
   const playerA = useMemo(() => players.find(p => p.id === idA) ?? null, [players, idA]);
   const playerB = useMemo(() => players.find(p => p.id === idB) ?? null, [players, idB]);
+  const isGK = playerA?.main_position === 'POR' && playerB?.main_position === 'POR';
 
   // Si el jugador seleccionado no está en la categoría filtrada, deseleccionar
   const handleFilterCat = (cat: string) => {
@@ -744,12 +1137,23 @@ export function Comparativas({ players }: ComparativasProps) {
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Encabezado */}
-      <div>
-        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic">Análisis Visual</p>
-        <h1 className="text-3xl md:text-4xl font-black text-white uppercase italic tracking-tighter leading-none mt-1">COMPARATIVAS</h1>
-        <p className="text-[11px] text-slate-500 font-semibold mt-1">
-          Selecciona dos jugadores y compara sus atributos en modo duelo.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic">Análisis Visual</p>
+          <h1 className="text-3xl md:text-4xl font-black text-white uppercase italic tracking-tighter leading-none mt-1">COMPARATIVAS</h1>
+          <p className="text-[11px] text-slate-500 font-semibold mt-1">
+            Selecciona dos jugadores y compara sus atributos en modo duelo.
+          </p>
+        </div>
+        {canPrint && playerA && playerB && (
+          <button
+            onClick={() => setShowPrintDialog(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/40 text-slate-300 hover:text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shrink-0"
+          >
+            <Printer size={14} />
+            Imprimir
+          </button>
+        )}
       </div>
 
       {/* Panel de selección */}
@@ -822,11 +1226,11 @@ export function Comparativas({ players }: ComparativasProps) {
 
       {/* Banner VS */}
       {playerA && playerB && (
-        <div className="flex items-stretch gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <VSPlayerCard player={playerA} color={COLOR_A.stroke} side="left" />
 
           {/* Escudo VS central */}
-          <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0">
+          <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0 self-center">
             <div className="w-14 h-14 rounded-full flex items-center justify-center font-black text-lg italic text-white"
               style={{
                 background: 'linear-gradient(135deg, #1e3a5f 0%, #4c0519 100%)',
@@ -906,9 +1310,22 @@ export function Comparativas({ players }: ComparativasProps) {
                 </span>
               </div>
 
-              {(Object.keys(AREAS) as AreaKey[]).map(areaKey => (
-                <DuelSection key={areaKey} areaKey={areaKey} playerA={playerA} playerB={playerB} />
+              {Object.values(AREAS).map((area, i) => (
+                <DuelSection key={String(i)} area={area} playerA={playerA} playerB={playerB} />
               ))}
+              {isGK && (
+                <>
+                  <div className="flex items-center gap-3 pt-2">
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
+                      <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                      <span className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.25em]">Análisis específico de portero</span>
+                    </div>
+                  </div>
+                  {Object.values(GK_AREAS).map((area, i) => (
+                    <DuelSection key={`gk-${i}`} area={area} playerA={playerA} playerB={playerB} />
+                  ))}
+                </>
+              )}
             </div>
           )}
 
@@ -929,10 +1346,25 @@ export function Comparativas({ players }: ComparativasProps) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {(Object.keys(AREAS) as AreaKey[]).map(areaKey => (
-                  <CompareRadar key={areaKey} areaKey={areaKey} playerA={playerA} playerB={playerB} />
+                {Object.values(AREAS).map((area, i) => (
+                  <CompareRadar key={String(i)} area={area} playerA={playerA} playerB={playerB} />
                 ))}
               </div>
+              {isGK && (
+                <>
+                  <div className="flex items-center gap-3 pt-2">
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
+                      <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                      <span className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.25em]">Análisis específico de portero</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {Object.values(GK_AREAS).map((area, i) => (
+                      <CompareRadar key={`gk-${i}`} area={area} playerA={playerA} playerB={playerB} />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>
@@ -943,6 +1375,70 @@ export function Comparativas({ players }: ComparativasProps) {
         <div className="flex items-center justify-center py-12 rounded-2xl border border-dashed border-slate-800">
           <p className="text-slate-600 italic text-sm">Selecciona un segundo jugador para comparar.</p>
         </div>
+      )}
+
+      {/* Dialog de selección de tipo de impresión */}
+      {showPrintDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowPrintDialog(false)} />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Informe PDF</p>
+                <h3 className="text-base font-black text-white mt-0.5">Tipo de gráfico</h3>
+              </div>
+              <button onClick={() => setShowPrintDialog(false)} className="text-slate-500 hover:text-white p-1.5 rounded-lg bg-slate-800 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <button
+                onClick={() => setPrintType('barras')}
+                className={cn(
+                  'flex flex-col items-center gap-2 p-4 rounded-xl border transition-all',
+                  printType === 'barras'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                    : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-slate-600 hover:text-white',
+                )}
+              >
+                <Swords size={22} />
+                <span className="text-[10px] font-black uppercase tracking-wider">Barras</span>
+                <span className="text-[8px] text-center opacity-60">Duelo atributo a atributo</span>
+              </button>
+              <button
+                onClick={() => setPrintType('radares')}
+                className={cn(
+                  'flex flex-col items-center gap-2 p-4 rounded-xl border transition-all',
+                  printType === 'radares'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                    : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-slate-600 hover:text-white',
+                )}
+              >
+                <BarChart2 size={22} />
+                <span className="text-[10px] font-black uppercase tracking-wider">Radares</span>
+                <span className="text-[8px] text-center opacity-60">4 radares superpuestos</span>
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPrintDialog(false)} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[11px] font-bold transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-black transition-all active:scale-95"
+              >
+                <Printer size={13} />
+                Imprimir PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Artículo imprimible */}
+      {canPrint && playerA && playerB && printReady && createPortal(
+        <ComparePrintArticle playerA={playerA} playerB={playerB} printType={printType} isGK={isGK} />,
+        document.body
       )}
     </div>
   );

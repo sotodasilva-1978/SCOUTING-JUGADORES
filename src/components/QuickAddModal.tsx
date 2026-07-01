@@ -53,7 +53,6 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
     mental_profile: '',
     strengths: '',
     weaknesses: '',
-    club_fit: '',
     next_step: '',
     why_interested: '',
     main_strength: '',
@@ -85,7 +84,6 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
         mental_profile: initialData.mental_profile || '',
         strengths: (initialData.strengths || []).join(', '),
         weaknesses: (initialData.weaknesses || []).join(', '),
-        club_fit: initialData.club_fit || '',
         next_step: initialData.next_step || '',
         why_interested: initialData.why_interested || '',
         main_strength: initialData.main_strength || '',
@@ -327,10 +325,6 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Talento Diferencial</label>
                       <input className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none" value={formData.differential_talent} onChange={e => setFormData({...formData, differential_talent: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Encaje Club</label>
-                      <input className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none" value={formData.club_fit} onChange={e => setFormData({...formData, club_fit: e.target.value})} />
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Próximo Paso</label>

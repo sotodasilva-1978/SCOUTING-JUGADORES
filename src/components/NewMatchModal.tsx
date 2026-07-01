@@ -1,15 +1,116 @@
-﻿import type React from 'react';
-import { X, Calendar, Trophy, MapPin, Tag } from 'lucide-react';
+import type React from 'react';
+import { X, Calendar, Trophy, MapPin, Tag, ChevronDown, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface NewMatchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: any) => void;
+  clubs?: string[];
 }
 
-export function NewMatchModal({ isOpen, onClose, onSave }: NewMatchModalProps) {
+interface TeamComboProps {
+  value: string;
+  onChange: (val: string) => void;
+  clubs: string[];
+  placeholder?: string;
+}
+
+function TeamCombo({ value, onChange, clubs, placeholder }: TeamComboProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        if (!value) setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [value]);
+
+  const filtered = query.trim()
+    ? clubs.filter(c => c.toLowerCase().includes(query.toLowerCase()))
+    : clubs;
+
+  const exactMatch = clubs.some(c => c.toLowerCase() === query.trim().toLowerCase());
+
+  const select = (name: string) => {
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
+  };
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    onChange(e.target.value);
+    setOpen(true);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          required
+          placeholder={placeholder}
+          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 pr-8 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+        />
+        <ChevronDown
+          size={14}
+          className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </div>
+
+      <AnimatePresence>
+        {open && (filtered.length > 0 || (query.trim() && !exactMatch)) && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className="absolute z-50 top-full mt-1 left-0 right-0 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-48 flex flex-col"
+          >
+            <div className="overflow-y-auto flex-1">
+              {filtered.map(club => (
+                <button
+                  key={club}
+                  type="button"
+                  onClick={() => select(club)}
+                  className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                >
+                  {club}
+                </button>
+              ))}
+            </div>
+
+            {query.trim() && !exactMatch && (
+              <button
+                type="button"
+                onClick={() => select(query.trim())}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-emerald-400 hover:bg-slate-700 border-t border-slate-700 transition-colors shrink-0"
+              >
+                <Plus size={13} />
+                <span>Añadir <strong>"{query.trim()}"</strong> como nuevo equipo</span>
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function NewMatchModal({ isOpen, onClose, onSave, clubs = [] }: NewMatchModalProps) {
   const today = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
@@ -96,28 +197,22 @@ export function NewMatchModal({ isOpen, onClose, onSave }: NewMatchModalProps) {
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">
                     Equipo Local
                   </label>
-                  <input
-                    type="text"
-                    name="home_team"
+                  <TeamCombo
                     value={formData.home_team}
-                    onChange={handleChange}
-                    required
-                    placeholder="Ej: Real Madrid"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    onChange={val => setFormData(prev => ({ ...prev, home_team: val }))}
+                    clubs={clubs}
+                    placeholder="Buscar equipo…"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">
                     Equipo Visitante
                   </label>
-                  <input
-                    type="text"
-                    name="away_team"
+                  <TeamCombo
                     value={formData.away_team}
-                    onChange={handleChange}
-                    required
-                    placeholder="Ej: Barcelona"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    onChange={val => setFormData(prev => ({ ...prev, away_team: val }))}
+                    clubs={clubs}
+                    placeholder="Buscar equipo…"
                   />
                 </div>
               </div>
@@ -135,22 +230,17 @@ export function NewMatchModal({ isOpen, onClose, onSave }: NewMatchModalProps) {
                     onChange={handleChange}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
                   >
-                    <option value="">Selecciona categoria</option>
-                    <option value="Benjamin">Benjamin</option>
-                    <option value="Alevin">Alevin</option>
+                    <option value="">Selecciona categoría</option>
+                    <option value="Prebenjamin">Prebenjamín</option>
+                    <option value="Benjamin">Benjamín</option>
+                    <option value="Alevin">Alevín</option>
                     <option value="Infantil">Infantil</option>
                     <option value="Cadete">Cadete</option>
                     <option value="Juvenil">Juvenil</option>
-                    <option value="Juvenil Nacional">Juvenil Nacional</option>
-                    <option value="Division de Honor Juvenil">Division de Honor Juvenil</option>
                     <option value="Sub-23">Sub-23</option>
-                    <option value="Senior">Senior</option>
-                    <option value="3a Division">3a Division</option>
-                    <option value="2a Federacion">2a Federacion</option>
-                    <option value="1a Federacion">1a Federacion</option>
-                    <option value="Segunda Division">Segunda Division</option>
-                    <option value="Primera Division">Primera Division</option>
+                    <option value="Senior">Sénior</option>
                     <option value="Femenino">Femenino</option>
+                    <option value="Futsal">Fútsal</option>
                     <option value="Otro">Otro</option>
                   </select>
                 </div>
@@ -182,7 +272,7 @@ export function NewMatchModal({ isOpen, onClose, onSave }: NewMatchModalProps) {
                   value={formData.competition}
                   onChange={handleChange}
                   required
-                  placeholder="Ej: Liga Nacional Juvenil"
+                  placeholder="Ej: Preferente Futsal Juvenil, 1ª Futgal Vigo..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>

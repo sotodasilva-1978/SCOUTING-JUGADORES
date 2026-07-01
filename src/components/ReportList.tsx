@@ -1,7 +1,7 @@
 import type React from 'react';
-import { 
-  Search, Filter, ChevronRight, Calendar, User, Smartphone, 
-  Monitor, Trash2, Edit2, Copy, CheckSquare, Square, Merge
+import {
+  Search, Filter, ChevronRight, User, Smartphone,
+  Monitor, Trash2, Edit2, CheckSquare, Square, Merge, X, SlidersHorizontal
 } from 'lucide-react';
 import { Report, Player, Match } from '../types';
 import { format } from 'date-fns';
@@ -36,17 +36,45 @@ export function ReportList({
 }: ReportListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterRecommendation, setFilterRecommendation] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterRating, setFilterRating] = useState('ALL');
 
   const filteredReports = useMemo(() => {
     return reports.filter(report => {
       const player = players.find(p => p.id === report.player_id);
       const searchLower = searchTerm.toLowerCase();
-      return (
+
+      const matchesSearch =
         player?.full_name.toLowerCase().includes(searchLower) ||
-        report.recommendation.toLowerCase().includes(searchLower)
-      );
+        report.recommendation.toLowerCase().includes(searchLower);
+
+      const matchesRecommendation =
+        filterRecommendation === 'ALL' || report.recommendation === filterRecommendation;
+
+      const matchesType =
+        filterType === 'ALL' ||
+        (filterType === 'RAPID' && (report.minutes_observed ?? 0) <= 45) ||
+        (filterType === 'COMPLETE' && (report.minutes_observed ?? 0) > 45);
+
+      const matchesRating =
+        filterRating === 'ALL' ||
+        (filterRating === '5' && report.match_rating === 5) ||
+        (filterRating === '4+' && report.match_rating >= 4) ||
+        (filterRating === '3-' && report.match_rating <= 3);
+
+      return matchesSearch && matchesRecommendation && matchesType && matchesRating;
     });
-  }, [reports, players, searchTerm]);
+  }, [reports, players, searchTerm, filterRecommendation, filterType, filterRating]);
+
+  const activeFilterCount = [filterRecommendation, filterType, filterRating].filter(f => f !== 'ALL').length;
+
+  const clearFilters = () => {
+    setFilterRecommendation('ALL');
+    setFilterType('ALL');
+    setFilterRating('ALL');
+  };
 
   const handleToggleSelect = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -123,20 +151,118 @@ export function ReportList({
       </AnimatePresence>
 
       <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden">
-        <div className="p-4 border-b border-slate-800 flex items-center gap-4 bg-slate-900/30">
+        <div className="p-4 border-b border-slate-800 flex items-center gap-3 bg-slate-900/30">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar por jugador u observador..." 
+            <input
+              type="text"
+              placeholder="Buscar por jugador u observador..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-2 text-sm focus:border-blue-500 outline-none transition-all"
             />
           </div>
-          <button className="p-2 border border-slate-800 rounded-xl text-slate-500 hover:text-slate-300">
-            <Filter size={20} />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={cn(
+                "relative p-2.5 border rounded-xl transition-all",
+                showFilters || activeFilterCount > 0
+                  ? "border-blue-500/50 text-blue-400 bg-blue-500/10"
+                  : "border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700"
+              )}
+            >
+              <SlidersHorizontal size={18} />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showFilters && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                      <Filter size={12} /> Filtros
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {activeFilterCount > 0 && (
+                        <button onClick={clearFilters} className="text-[9px] font-black text-blue-400 uppercase tracking-wider hover:text-blue-300 transition-colors">
+                          Limpiar
+                        </button>
+                      )}
+                      <button onClick={() => setShowFilters(false)} className="text-slate-600 hover:text-slate-300 transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-4">
+                    {/* Recomendación */}
+                    <div>
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Recomendación</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { value: 'ALL', label: 'Todos' },
+                          { value: 'PRIORITY', label: 'Prioridad' },
+                          { value: 'TRACKING', label: 'Seguimiento' },
+                          { value: 'INTERESTING', label: 'Interesante' },
+                          { value: 'DISCARD', label: 'Descartar' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setFilterRecommendation(opt.value)}
+                            className={cn(
+                              "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all text-left",
+                              filterRecommendation === opt.value
+                                ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
+                                : "bg-slate-950 text-slate-500 border border-slate-800 hover:border-slate-700 hover:text-slate-300"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div>
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Score del partido</p>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { value: 'ALL', label: 'Todos' },
+                          { value: '5', label: '★ 5' },
+                          { value: '4+', label: '4+' },
+                          { value: '3-', label: '≤ 3' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setFilterRating(opt.value)}
+                            className={cn(
+                              "px-2 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all text-center",
+                              filterRating === opt.value
+                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                : "bg-slate-950 text-slate-500 border border-slate-800 hover:border-slate-700 hover:text-slate-300"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         <div className="divide-y divide-slate-800">

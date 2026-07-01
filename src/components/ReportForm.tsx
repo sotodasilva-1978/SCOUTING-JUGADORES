@@ -290,9 +290,9 @@ export function ReportForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Basic Context Section */}
-        <section className="md:col-span-1 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] p-8 space-y-8 backdrop-blur-sm">
+        <section className="lg:col-span-1 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] p-8 space-y-8 backdrop-blur-sm">
           <div className="flex items-center gap-4 mb-4">
              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
                 <Target size={20} />
@@ -397,7 +397,7 @@ export function ReportForm({
         {/* Narrative Section (Rapid Mode / Left side of Complete) */}
         <section className={cn(
           "bg-slate-900/40 border border-slate-800 rounded-[2.5rem] p-10 backdrop-blur-sm relative overflow-hidden",
-          editorMode === 'RAPID' ? 'md:col-span-2' : 'md:col-span-2'
+          editorMode === 'RAPID' ? 'lg:col-span-2' : 'lg:col-span-2'
         )}>
           {editorMode === 'RAPID' ? (
              <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -515,7 +515,7 @@ export function ReportForm({
                 </div>
 
                 {/* All rating categories for Complete editor */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
                    {Object.entries(RATING_CATEGORIES).map(([catId, attributes]) => (
                       <div key={catId} className="space-y-6 bg-slate-950/40 p-8 rounded-[2rem] border border-slate-800/60 shadow-xl group">
                          <div className="flex items-center gap-3 mb-2">
@@ -630,7 +630,7 @@ export function ReportForm({
                 </div>
 
                 {/* Additional Narrative for Complete */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 pt-8 border-t border-slate-800">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 pt-8 border-t border-slate-800">
                     {[
                       { label: 'Perfil Técnico Extendido', field: 'technical_comment', color: 'text-blue-400' },
                       { label: 'Perfil Táctico Extendido', field: 'tactical_comment', color: 'text-emerald-400' },

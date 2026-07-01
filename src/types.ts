@@ -72,17 +72,25 @@ export interface CustomRating {
 }
 
 export interface TrajectoryEntry {
+  id?: string;
+  player_id?: string;
+  club_id?: string | null;
+  club_name_snapshot?: string;
   season: string;
   team: string;
   category: string;
-  minutes: number;
+  competition?: string;
   matches_played: number;
-  starts: number;
-  substitutes: number;
+  minutes_played?: number;
+  minutes?: number;
+  starts?: number;
+  substitutes?: number;
   goals: number;
-  assists: number;
+  assists?: number;
   yellow_cards: number;
   red_cards: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Player {
