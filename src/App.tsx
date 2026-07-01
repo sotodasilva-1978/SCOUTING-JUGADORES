@@ -402,7 +402,7 @@ export default function App() {
   // Helper to clean report data for Supabase
   const prepareReportForDB = async (report: Report) => {
     const allowedFields = [
-      'id', 'player_id', 'match_id', 'observer_id', 'report_date', 'category_id', 
+      'id', 'player_id', 'match_id', 'observer_id', 'observer_role', 'report_date', 'category_id',
       'position_played', 'minutes_observed', 'match_context', 'technical_comment', 
       'tactical_comment', 'physical_comment', 'mental_comment', 'strengths', 
       'weaknesses', 'key_actions', 'doubts', 'recommendation', 'next_step', 
@@ -775,6 +775,10 @@ export default function App() {
       match_id: data.match_id,
       observer_id: effectiveEditingReport?.observer_id, // Leave null for now if not UUID
       report_date: data.report_date || new Date().toISOString(),
+      position_played: (data as any).position_played || undefined,
+      minutes_observed: Number((data as any).minutes_observed) || 90,
+      match_context: (data as any).match_context || undefined,
+      observer_role: (data as any).observer_role || undefined,
       recommendation: data.recommendation || 'TRACKING',
       match_rating: Number(data.match_rating) || 3,
       technical_comment: data.technical_comment,
@@ -793,6 +797,23 @@ export default function App() {
       custom_ratings: data.custom_ratings || [],
       created_at: effectiveEditingReport?.created_at || new Date().toISOString(),
     };
+
+    // Inject individual attribute ratings from form into reportData so avgRating can average them
+    const _INDIVIDUAL_RATING_FIELDS = [
+      'rating_velo_despl','rating_acel','rating_fuerza','rating_resis','rating_agil','rating_coord',
+      'rating_velo_reac','rating_poten','rating_recup_fatiga','rating_tenden_lesion',
+      'rating_pase_corto','rating_pase_largo','rating_ctrl_balon','rating_tiro','rating_regate',
+      'rating_conduc','rating_superf_cont','rating_despeje','rating_entrada','rating_pierna_menos',
+      'rating_posic','rating_cobertura','rating_repliegue','rating_ayuda_def','rating_marcajes',
+      'rating_dom_espacios','rating_vigilancias','rating_apoyos_off','rating_desmarques','rating_temporiz',
+      'rating_liderazgo','rating_caracter','rating_competitiv','rating_companerismo','rating_mentalidad',
+      'rating_agresividad','rating_polivalencia','rating_inteligencia','rating_comunicacion','rating_personalidad',
+      'rating_juego_aereo',
+    ];
+    _INDIVIDUAL_RATING_FIELDS.forEach(f => {
+      const v = Number((data as any)[f]);
+      if (v > 0) (reportData as any)[f] = v;
+    });
 
     // Prepare report for DB
     try {
@@ -1090,8 +1111,6 @@ export default function App() {
           onDeletePlayer={handleDeletePlayer}
           initialClubFilter={playerClubFilter}
           initialStatusFilter={playerStatusFilter}
-          userRole={userRole}
-          userId={userId}
         />;
       case 'teams':
         return (
@@ -1139,6 +1158,11 @@ export default function App() {
           onSelectPlayer={handleSelectPlayer}
           onSelectMatch={handleSelectMatch}
           onTabChange={setActiveTab}
+          onNavigatePlayers={(statusFilter) => {
+            setPlayerStatusFilter(statusFilter);
+            setPlayerClubFilter(undefined);
+            setActiveTab('players');
+          }}
           players={scopedPlayers}
           matches={matches}
           reports={scopedReports}

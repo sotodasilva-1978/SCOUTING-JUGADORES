@@ -9,6 +9,183 @@ import { Player, Match, Report, TrajectoryEntry, CustomRating } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 
+// ── GK Radar: 10-vertex chart combining two 5-attr GK categories ─────────────
+interface GKRadarCat {
+  label: string;
+  color: string;       // stroke/fill color (e.g. '#06b6d4')
+  textColor: string;   // tailwind class for the title
+  attrs: ReadonlyArray<{ label: string; field: string }>;
+}
+
+function GKRadarChart({
+  catA, catB, values,
+}: { catA: GKRadarCat; catB: GKRadarCat; values: Record<string, number> }) {
+  const cx = 130; const cy = 130; const r = 90;
+  const N = 10;
+  const allAttrs = [...catA.attrs, ...catB.attrs]; // 10 total
+  const colors  = [...Array(5).fill(catA.color), ...Array(5).fill(catB.color)];
+
+  const pt = (i: number, scale: number) => {
+    const angle = (Math.PI * 2 * i) / N - Math.PI / 2;
+    return { x: cx + scale * r * Math.cos(angle), y: cy + scale * r * Math.sin(angle) };
+  };
+
+  // Concentric reference circles
+  const refs = [0.2, 0.4, 0.6, 0.8, 1.0];
+
+  // Polygon for actual values
+  const polyPts = allAttrs.map((a, i) => {
+    const v = Math.min(Math.max(Number(values[a.field]) || 0, 0), 5) / 5;
+    return pt(i, v);
+  });
+  const polyStr = polyPts.map(p => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <div className="bg-slate-950/60 rounded-[1.5rem] border border-slate-800/60 p-5 space-y-3">
+      {/* Legend */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: catA.color }}>{catA.label}</span>
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">+</span>
+        <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: catB.color }}>{catB.label}</span>
+      </div>
+      <svg viewBox="0 0 260 260" className="w-full max-w-[260px] mx-auto">
+        {/* Reference rings */}
+        {refs.map(s => (
+          <polygon
+            key={s}
+            points={Array.from({length: N}, (_, i) => { const p = pt(i, s); return `${p.x},${p.y}`; }).join(' ')}
+            fill="none" stroke="#1e293b" strokeWidth="1"
+          />
+        ))}
+        {/* Axis lines */}
+        {allAttrs.map((_, i) => {
+          const end = pt(i, 1);
+          return <line key={i} x1={cx} y1={cy} x2={end.x} y2={end.y} stroke="#1e293b" strokeWidth="1" />;
+        })}
+        {/* Axis dots colored by category */}
+        {allAttrs.map((_, i) => {
+          const end = pt(i, 1.05);
+          return <circle key={i} cx={end.x} cy={end.y} r="3" fill={colors[i]} opacity="0.6" />;
+        })}
+        {/* Value polygon */}
+        <polygon
+          points={polyStr}
+          fill={catA.color}
+          fillOpacity="0.12"
+          stroke={catA.color}
+          strokeWidth="1.5"
+          strokeOpacity="0.7"
+        />
+        {/* Dots on vertices */}
+        {polyPts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3" fill={colors[i]} opacity="0.9" />
+        ))}
+        {/* Labels */}
+        {allAttrs.map((a, i) => {
+          const lp = pt(i, 1.28);
+          const short = a.label.length > 12 ? a.label.substring(0, 11) + '…' : a.label;
+          return (
+            <text
+              key={i}
+              x={lp.x}
+              y={lp.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="7"
+              fontWeight="700"
+              fill={colors[i]}
+              opacity="0.85"
+            >
+              {short}
+            </text>
+          );
+        })}
+        {/* Center value avg */}
+        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="#94a3b8">
+          {(allAttrs.reduce((s, a) => s + (Number(values[a.field]) || 0), 0) / N).toFixed(1)}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+const OBSERVER_ROLE_OPTIONS = [
+  { value: 'SCOUT',     label: 'Scout General' },
+  { value: 'SCOUT_F11', label: 'Scout F11' },
+  { value: 'SCOUT_F8',  label: 'Scout F8' },
+  { value: 'ENTREN',    label: 'Entrenador' },
+  { value: 'COORD',     label: 'Coordinador' },
+  { value: 'COORD_F11', label: 'Coordinador F11' },
+  { value: 'COORD_F8',  label: 'Coordinador F8' },
+  { value: 'PRESID',    label: 'Presidente' },
+  { value: 'ADMIN',     label: 'Administrador' },
+];
+
+const POSITION_OPTIONS = [
+  { value: 'POR', label: 'POR – Portero' },
+  { value: 'DFC', label: 'DFC – Defensa Central' },
+  { value: 'LD',  label: 'LD – Lateral Derecho' },
+  { value: 'LI',  label: 'LI – Lateral Izquierdo' },
+  { value: 'MCD', label: 'MCD – Mediocentro Defensivo' },
+  { value: 'MC',  label: 'MC – Mediocentro' },
+  { value: 'MCO', label: 'MCO – Mediapunta' },
+  { value: 'ED',  label: 'ED – Extremo Derecho' },
+  { value: 'EI',  label: 'EI – Extremo Izquierdo' },
+  { value: 'SD',  label: 'SD – Segunda Delantero' },
+  { value: 'DC',  label: 'DC – Delantero Centro' },
+];
+
+const GK_RATING_CATEGORIES = {
+  gk_bajo_palos: {
+    label: 'BAJO PALOS',
+    color: 'bg-cyan-500/80',
+    textColor: 'text-cyan-400',
+    attrs: [
+      { label: 'Reflejos',                field: 'rating_velo_reac',   tooltip: 'Velocidad de reacción ante el disparo.' },
+      { label: 'Agilidad bajo palos',     field: 'rating_agil',        tooltip: 'Capacidad de desplazarse y cubrir el ángulo.' },
+      { label: 'Colocación / posición',   field: 'rating_posic',       tooltip: 'Posicionamiento óptimo según el peligro.' },
+      { label: 'Potencia de salto',       field: 'rating_poten',       tooltip: 'Explosividad en el salto para cubrir el arco.' },
+      { label: 'Coordinación',            field: 'rating_coord',       tooltip: 'Sincronía de cuerpo y manos en la parada.' },
+    ],
+  },
+  gk_con_balon: {
+    label: 'CON EL BALÓN',
+    color: 'bg-blue-500/80',
+    textColor: 'text-blue-400',
+    attrs: [
+      { label: 'Juego pie (corto)',        field: 'rating_pase_corto',    tooltip: 'Construcción en corto con el pie.' },
+      { label: 'Saque largo / distrib.',   field: 'rating_pase_largo',    tooltip: 'Precisión en envíos largos para iniciar jugada.' },
+      { label: 'Control / amortiguación',  field: 'rating_ctrl_balon',    tooltip: 'Calidad del primer toque en balones en juego.' },
+      { label: 'Despeje / puñetazo',       field: 'rating_despeje',       tooltip: 'Calidad del despeje bajo presión.' },
+      { label: 'Pierna no dominante',      field: 'rating_pierna_menos',  tooltip: 'Pie contrario en situaciones de construcción.' },
+    ],
+  },
+  gk_salidas: {
+    label: 'SALIDAS Y AÉREO',
+    color: 'bg-violet-500/80',
+    textColor: 'text-violet-400',
+    attrs: [
+      { label: 'Dominio del área',          field: 'rating_juego_aereo',   tooltip: 'Reclamación segura de centros.' },
+      { label: 'Lectura de salidas',         field: 'rating_dom_espacios',  tooltip: 'Capacidad de leer cuándo salir o quedarse.' },
+      { label: 'Posición en 1vs1',           field: 'rating_marcajes',      tooltip: 'Posicionamiento ante remates en mano a mano.' },
+      { label: 'Fortaleza en choques',       field: 'rating_fuerza',        tooltip: 'Resistencia física en salidas con contacto.' },
+      { label: 'Resistencia / concentr.',    field: 'rating_resis',         tooltip: 'Mantener el nivel y foco los 90 minutos.' },
+    ],
+  },
+  gk_mental: {
+    label: 'MENTAL Y LIDERAZGO',
+    color: 'bg-amber-500/80',
+    textColor: 'text-amber-400',
+    attrs: [
+      { label: 'Liderazgo defensivo',  field: 'rating_liderazgo',    tooltip: 'Capacidad de organizar y dirigir la línea defensiva.' },
+      { label: 'Comunicación',         field: 'rating_comunicacion', tooltip: 'Órdenes verbales claras y constantes a la defensa.' },
+      { label: 'Mentalidad / foco',    field: 'rating_mentalidad',   tooltip: 'Concentración y respuesta tras encajar un gol.' },
+      { label: 'Competitividad',       field: 'rating_competitiv',   tooltip: 'Actitud ante la adversidad y situaciones de tensión.' },
+      { label: 'Personalidad',         field: 'rating_personalidad', tooltip: 'Seguridad en sí mismo y presencia en el campo.' },
+    ],
+  },
+};
+
 const RATING_CATEGORIES = {
   fisicas: [
     { label: 'Velocid. desplazam.', field: 'rating_velo_despl', tooltip: 'Pura velocidad de carrera en distancias largas.' },
@@ -163,15 +340,16 @@ interface ReportFormProps {
   userId?: string;
 }
 
-export function ReportForm({ 
-  initialPlayerId, 
-  initialMatchId, 
+export function ReportForm({
+  initialPlayerId,
+  initialMatchId,
   initialMode = 'RAPID',
   initialReport,
-  players, 
-  matches, 
-  onSave, 
-  onCancel 
+  players,
+  matches,
+  onSave,
+  onCancel,
+  userRole,
 }: ReportFormProps) {
   const [editorMode, setEditorMode] = useState<'RAPID' | 'COMPLETE'>(initialMode);
   const [isListening, setIsListening] = useState(false);
@@ -187,6 +365,7 @@ export function ReportForm({
     report_date: initialReport?.report_date 
       ? initialReport.report_date.split('T')[0] 
       : new Date().toISOString().split('T')[0],
+    observer_role: (initialReport as any)?.observer_role || userRole || '',
     position_played: initialReport?.position_played || selectedPlayer?.main_position || '',
     minutes_observed: initialReport?.minutes_observed || 90,
     match_context: initialReport?.match_context || '',
@@ -213,12 +392,14 @@ export function ReportForm({
     weight_kg: selectedPlayer?.weight_kg || '',
     short_name: selectedPlayer?.short_name || '',
     competition: selectedPlayer?.competition || '',
-    // All Ratings
+    // All Ratings — individual attrs live on the Player record, not on the Report
     ...Object.values(RATING_CATEGORIES).flat().reduce((acc, attr) => ({
       ...acc,
-      [attr.field]: initialReport 
-        ? (initialReport as any)[attr.field] 
-        : (selectedPlayer ? (selectedPlayer as any)[attr.field] || 0 : 0)
+      [attr.field]: selectedPlayer ? (selectedPlayer as any)[attr.field] || 0 : 0
+    }), {}),
+    ...Object.values(GK_RATING_CATEGORIES).flatMap(cat => cat.attrs).reduce((acc, attr) => ({
+      ...acc,
+      [attr.field]: selectedPlayer ? (selectedPlayer as any)[attr.field] || 0 : 0
     }), {})
   });
 
@@ -330,6 +511,20 @@ export function ReportForm({
               </select>
             </div>
 
+            <div>
+              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Rol del Observador</label>
+              <select
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-emerald-500/50 appearance-none font-bold text-xs shadow-inner"
+                value={formData.observer_role}
+                onChange={(e) => setFormData({...formData, observer_role: e.target.value})}
+              >
+                <option value="">— Sin especificar —</option>
+                {OBSERVER_ROLE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
                <div>
                 <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Minutos</label>
@@ -341,13 +536,22 @@ export function ReportForm({
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Posición</label>
-                <input
-                  placeholder="Ej: DC"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-emerald-500/50 font-black text-sm shadow-inner"
+                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">
+                  Posición
+                  {formData.position_played === 'POR' && (
+                    <span className="ml-2 px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full text-[8px] tracking-widest animate-pulse">● PORTERO</span>
+                  )}
+                </label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-emerald-500/50 font-black text-sm shadow-inner appearance-none"
                   value={formData.position_played}
                   onChange={(e) => setFormData({...formData, position_played: e.target.value})}
-                />
+                >
+                  <option value="">— Seleccionar posición —</option>
+                  {POSITION_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -487,6 +691,40 @@ export function ReportForm({
                         ))}
                       </div>
                    </div>
+
+                   {/* GK mini-ratings in RAPID mode */}
+                   {formData.position_played === 'POR' && (
+                     <div className="pt-6 border-t border-cyan-500/20 space-y-3">
+                       <div className="flex items-center gap-2">
+                         <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                         <h4 className="text-[9px] font-black text-cyan-400 uppercase tracking-widest italic">Valoración Portero — Familias</h4>
+                       </div>
+                       <div className="grid grid-cols-2 gap-4">
+                         {[
+                           { label: 'Bajo Palos', field: 'rating_velo_reac', color: 'text-cyan-400', bgColor: 'bg-cyan-500' },
+                           { label: 'Con Balón',  field: 'rating_pase_corto', color: 'text-blue-400', bgColor: 'bg-blue-500' },
+                           { label: 'Salidas',    field: 'rating_juego_aereo', color: 'text-violet-400', bgColor: 'bg-violet-500' },
+                           { label: 'Liderazgo',  field: 'rating_liderazgo', color: 'text-amber-400', bgColor: 'bg-amber-500' },
+                         ].map((family) => (
+                           <div key={family.field} className="bg-slate-950/60 p-4 rounded-2xl border border-cyan-500/10 shadow-inner">
+                             <div className="flex items-center gap-2 mb-3">
+                               <span className={cn('text-[9px] font-black uppercase tracking-widest', family.color)}>{family.label}</span>
+                             </div>
+                             <div className="flex gap-1">
+                               {[1,2,3,4,5].map(v => (
+                                 <button
+                                   key={v}
+                                   type="button"
+                                   onClick={() => setFormData({...formData, [family.field]: v})}
+                                   className={cn('flex-1 h-2 rounded-full transition-all', (formData as any)[family.field] >= v ? family.bgColor : 'bg-slate-800')}
+                                 />
+                               ))}
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   )}
 
                    <div className="space-y-3 pt-4">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Plan de Seguimiento</label>
@@ -628,6 +866,75 @@ export function ReportForm({
                       </div>
                    ))}
                 </div>
+
+                {/* ── BLOQUE ESPECÍFICO PORTERO ─────────────────────────── */}
+                {formData.position_played === 'POR' && (
+                  <div className="space-y-6 pt-8 border-t border-cyan-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 px-4 py-1.5 bg-cyan-500/10 border border-cyan-500/30 rounded-full">
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                        <span className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.25em]">Análisis específico de portero</span>
+                      </div>
+                    </div>
+                    {/* GK Radar Charts: Bajo Palos+Salidas / Con Balón+Mental */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                      <GKRadarChart
+                        catA={{ ...GK_RATING_CATEGORIES.gk_bajo_palos, color: '#06b6d4', textColor: 'text-cyan-400' }}
+                        catB={{ ...GK_RATING_CATEGORIES.gk_salidas,    color: '#8b5cf6', textColor: 'text-violet-400' }}
+                        values={formData as any}
+                      />
+                      <GKRadarChart
+                        catA={{ ...GK_RATING_CATEGORIES.gk_con_balon, color: '#3b82f6', textColor: 'text-blue-400' }}
+                        catB={{ ...GK_RATING_CATEGORIES.gk_mental,    color: '#f59e0b', textColor: 'text-amber-400' }}
+                        values={formData as any}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
+                      {Object.entries(GK_RATING_CATEGORIES).map(([catId, cat]) => (
+                        <div key={catId} className="space-y-6 bg-slate-950/40 p-8 rounded-[2rem] border border-slate-800/60 shadow-xl">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className={cn('text-[11px] font-black uppercase tracking-[0.3em] bg-slate-900 px-4 py-2 rounded-xl italic border border-slate-800', cat.textColor)}>{cat.label}</h4>
+                          </div>
+                          <div className="space-y-5">
+                            {cat.attrs.map((attr, i) => {
+                              const val = (formData as any)[attr.field] || 0;
+                              return (
+                                <div key={i} className="space-y-2 group/row relative">
+                                  <div className="flex items-center justify-between px-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={cn('text-[10px] font-black uppercase tracking-widest group-hover/row:text-slate-300 transition-colors border-b border-dotted border-slate-800', val > 0 ? cat.textColor : 'text-slate-500')}>{attr.label}</span>
+                                      <div className="group/tip relative">
+                                        <Info size={10} className="text-slate-700 hover:text-slate-500 cursor-help" />
+                                        <div className="absolute left-0 bottom-full mb-2 w-48 p-2 bg-slate-950 border border-slate-800 rounded-lg text-[9px] text-slate-400 invisible group-hover/tip:visible z-50 shadow-2xl">
+                                          {attr.tooltip}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <span className={cn('text-xs font-black font-mono italic', cat.textColor)}>{val}</span>
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    {[1, 2, 3, 4, 5].map(v => (
+                                      <button
+                                        key={v}
+                                        type="button"
+                                        onClick={() => setFormData({...formData, [attr.field]: v})}
+                                        className={cn(
+                                          'flex-1 h-3.5 rounded-full transition-all border border-slate-800/50',
+                                          val >= v ? `${cat.color} shadow-inner border-transparent` : 'bg-slate-900 border-slate-800/20 hover:bg-slate-800'
+                                        )}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Additional Narrative for Complete */}
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 pt-8 border-t border-slate-800">

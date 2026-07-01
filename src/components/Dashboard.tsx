@@ -227,7 +227,7 @@ export const Dashboard = memo(function Dashboard({
     },
     {
       label: 'Prioritarios',
-      value: players.filter(p => p.status === 'PRIORITY' || p.status === 'PRIORIDAD').length,
+      value: players.filter(p => p.status === 'PRIORITY').length,
       icon: Star,
       color: 'text-purple-500',
       bgColor: 'bg-purple-500/10',

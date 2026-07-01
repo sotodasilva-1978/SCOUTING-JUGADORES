@@ -263,6 +263,7 @@ export interface Report {
   position_played?: string;
   minutes_observed?: number;
   match_context?: string;
+  observer_role?: string;
   technical_comment?: string;
   tactical_comment?: string;
   physical_comment?: string;
