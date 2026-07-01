@@ -9,7 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
-import { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useId, ChangeEvent, FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
 import { formatClubFitDisplay } from '../lib/clubModel';
@@ -224,20 +224,24 @@ const makeDotStyle = (pos: string) => {
   return { top: p.top, bottom: p.bottom, left: p.left, right: p.right, transform };
 };
 
-const PitchMap = ({ position, secondaryPositions = [], className }: { position: string; secondaryPositions?: string[]; className?: string }) => (
+function PitchMap({ position, secondaryPositions = [], className }: { position: string; secondaryPositions?: string[]; className?: string }) {
+  const uid = useId().replace(/:/g, '');
+  const gradId = `pitch-bg-${uid}`;
+  const stripId = `pitch-stripes-${uid}`;
+  return (
   <div className={cn("relative w-full max-w-[260px] mx-auto aspect-[68/100] overflow-hidden rounded-xl border border-emerald-400/25 bg-[#062d27] shadow-[0_24px_60px_rgba(0,0,0,0.35),inset_0_0_35px_rgba(16,185,129,0.08)]", className)}>
     <svg viewBox="0 0 680 1000" className="absolute inset-0 h-full w-full" aria-hidden="true">
       <defs>
-        <linearGradient id="pitch-bg" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#0b4a3c" />
           <stop offset="1" stopColor="#052b26" />
         </linearGradient>
-        <pattern id="pitch-stripes" width="136" height="1000" patternUnits="userSpaceOnUse">
+        <pattern id={stripId} width="136" height="1000" patternUnits="userSpaceOnUse">
           <rect width="68" height="1000" fill="#ffffff" fillOpacity="0.025" />
         </pattern>
       </defs>
-      <rect width="680" height="1000" fill="url(#pitch-bg)" />
-      <rect width="680" height="1000" fill="url(#pitch-stripes)" />
+      <rect width="680" height="1000" fill={`url(#${gradId})`} />
+      <rect width="680" height="1000" fill={`url(#${stripId})`} />
       <g fill="none" stroke="#d9fff2" strokeOpacity="0.42" strokeWidth="4">
         <rect x="38" y="38" width="604" height="924" rx="10" />
         <path d="M38 500h604" />
@@ -268,7 +272,8 @@ const PitchMap = ({ position, secondaryPositions = [], className }: { position: 
     </div>
     <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-slate-950/35 to-transparent" />
   </div>
-);
+  );
+}
 
 function PrintableRadar({ title, attributes, player, color }: {
   title: string;
