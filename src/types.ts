@@ -71,6 +71,15 @@ export interface CustomRating {
   value: number;
 }
 
+export interface ContactEntry {
+  id?: string;
+  player_id?: string;
+  contact_type: string;
+  note: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface TrajectoryEntry {
   id?: string;
   player_id?: string;
@@ -138,6 +147,7 @@ export interface Player {
   competition?: string;
   lateralidad?: string;
   trajectory?: TrajectoryEntry[];
+  contacts?: ContactEntry[];
 
   // Perfil detallado (Ratings 1-5)
   // Físicas

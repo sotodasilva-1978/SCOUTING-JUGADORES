@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS players (
   contact_tutor1 TEXT,
   contact_tutor1_role TEXT,
   contact_other TEXT,
+  contact_other_role TEXT,
   verification_status JSONB DEFAULT '{}'::jsonb,
   
   has_video BOOLEAN DEFAULT false,
@@ -262,10 +263,9 @@ CREATE TABLE IF NOT EXISTS reports (
   rating_mental DECIMAL DEFAULT 0,
   custom_ratings JSONB DEFAULT '[]'::jsonb,
   video_urls TEXT[],
+  observer_role TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Videos
 CREATE TABLE IF NOT EXISTS videos (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   player_id UUID REFERENCES players(id) ON DELETE CASCADE,
@@ -349,6 +349,8 @@ DROP POLICY IF EXISTS "Scouts can insert players" ON players;
 CREATE POLICY "Scouts can insert players" ON players FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Scouts can update all players" ON players;
 CREATE POLICY "Scouts can update all players" ON players FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Allow delete players" ON players;
+CREATE POLICY "Allow delete players" ON players FOR DELETE USING (true);
 
 -- Allow public access to other tables too so bootstrapping works
 DROP POLICY IF EXISTS "Allow public read on clubs" ON clubs;
@@ -379,15 +381,61 @@ CREATE POLICY "Allow public insert on rating_weights" ON rating_weights FOR INSE
 DROP POLICY IF EXISTS "Allow public update on rating_weights" ON rating_weights;
 CREATE POLICY "Allow public update on rating_weights" ON rating_weights FOR UPDATE USING (true);
 
--- Polices for reports
+-- Policies for reports
 DROP POLICY IF EXISTS "Allow public read on reports" ON reports;
 CREATE POLICY "Allow public read on reports" ON reports FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow public insert on reports" ON reports;
 CREATE POLICY "Allow public insert on reports" ON reports FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update on reports" ON reports;
 CREATE POLICY "Allow public update on reports" ON reports FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Allow delete reports" ON reports;
+CREATE POLICY "Allow delete reports" ON reports FOR DELETE USING (true);
+
+-- Policies for matches
+DROP POLICY IF EXISTS "Allow public read on matches" ON matches;
+CREATE POLICY "Allow public read on matches" ON matches FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow public insert on matches" ON matches;
+CREATE POLICY "Allow public insert on matches" ON matches FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow public update on matches" ON matches;
+CREATE POLICY "Allow public update on matches" ON matches FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Allow public delete on matches" ON matches;
+CREATE POLICY "Allow public delete on matches" ON matches FOR DELETE USING (true);
+
+-- Policies for videos
+DROP POLICY IF EXISTS "Allow public read on videos" ON videos;
+CREATE POLICY "Allow public read on videos" ON videos FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow public insert on videos" ON videos;
+CREATE POLICY "Allow public insert on videos" ON videos FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow public update on videos" ON videos;
+CREATE POLICY "Allow public update on videos" ON videos FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Allow public delete on videos" ON videos;
+CREATE POLICY "Allow public delete on videos" ON videos FOR DELETE USING (true);
 
 DROP POLICY IF EXISTS "Allow public read on history_logs" ON history_logs;
 CREATE POLICY "Allow public read on history_logs" ON history_logs FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow public insert on history_logs" ON history_logs;
 CREATE POLICY "Allow public insert on history_logs" ON history_logs FOR INSERT WITH CHECK (true);
+
+-- Player contacts table
+CREATE TABLE IF NOT EXISTS player_contacts (
+  id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  player_id    UUID        NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  contact_type TEXT        NOT NULL,
+  note         TEXT        NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_contacts_player ON player_contacts(player_id);
+CREATE INDEX IF NOT EXISTS idx_player_contacts_created ON player_contacts(created_at);
+
+ALTER TABLE player_contacts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow read player contacts" ON player_contacts;
+CREATE POLICY "Allow read player contacts" ON player_contacts FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow insert player contacts" ON player_contacts;
+CREATE POLICY "Allow insert player contacts" ON player_contacts FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update player contacts" ON player_contacts;
+CREATE POLICY "Allow update player contacts" ON player_contacts FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow delete player contacts" ON player_contacts;
+CREATE POLICY "Allow delete player contacts" ON player_contacts FOR DELETE USING (true);

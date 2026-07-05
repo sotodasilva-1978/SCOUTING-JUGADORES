@@ -1,13 +1,13 @@
 import {
   ArrowLeft, User, Star, Video, ClipboardList, Shield, Edit3, Trash2,
-  Calendar, Target, Zap, AlertCircle, ChevronRight, Plus, Trophy,
+  Calendar, Target, Zap, AlertCircle, ChevronRight, Plus, Trophy, Check,
   History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
   TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
   MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
   LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink, Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog } from '../types';
+import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog, ContactEntry } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
 import React, { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -355,6 +355,9 @@ interface PlayerDetailProps {
   onAddVideo: (video: { url: string; title: string; description?: string; is_key?: boolean }) => void;
   onDeleteVideo?: (videoId: string) => void;
   onUpdatePlayer?: (player: Player) => void;
+  onAddFieldNote?: (text: string, score?: number) => void;
+  onUpdateFieldNote?: (reportId: string, text: string, score?: number) => void;
+  onDeleteFieldNote?: (reportId: string) => void;
   initialTab?: string;
   userRole?: string;
   userId?: string;
@@ -389,6 +392,29 @@ function SpeechToTextButton({ onTranscript, className }: { onTranscript: (text: 
   );
 }
 
+interface ActionItem {
+  id: string;
+  date: string;
+  typeLabel: string;
+  note?: string;
+  dotColor: string;
+  badgeColor: string;
+  deletable?: boolean;
+  contactRef?: ContactEntry;
+}
+
+const CONTACT_TYPE_CONFIG: Record<string, { dot: string; badge: string }> = {
+  'Primer contacto':     { dot: 'bg-blue-500',    badge: 'bg-blue-500/15 border-blue-500/30 text-blue-300' },
+  'Segundo contacto':    { dot: 'bg-blue-400',    badge: 'bg-blue-500/15 border-blue-500/30 text-blue-300' },
+  'Contacto con tutor':  { dot: 'bg-amber-500',   badge: 'bg-amber-500/15 border-amber-500/30 text-amber-300' },
+  'Contacto con agente': { dot: 'bg-amber-400',   badge: 'bg-amber-500/15 border-amber-500/30 text-amber-300' },
+  'Oferta formal':       { dot: 'bg-orange-500',  badge: 'bg-orange-500/15 border-orange-500/30 text-orange-300' },
+  'Negociación':         { dot: 'bg-orange-400',  badge: 'bg-orange-500/15 border-orange-500/30 text-orange-300' },
+  'Acuerdo':             { dot: 'bg-emerald-500', badge: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' },
+  'Otro':                { dot: 'bg-slate-500',   badge: 'bg-slate-500/15 border-slate-500/30 text-slate-300' },
+  'Cambio de decisión':  { dot: 'bg-violet-500',  badge: 'bg-violet-500/15 border-violet-500/30 text-violet-300' },
+};
+
 export function PlayerDetail({
   player,
   reports, 
@@ -403,6 +429,9 @@ export function PlayerDetail({
   onAddVideo,
   onDeleteVideo,
   onUpdatePlayer,
+  onAddFieldNote,
+  onUpdateFieldNote,
+  onDeleteFieldNote,
   initialTab = 'resumen',
   userRole
 }: PlayerDetailProps) {
@@ -418,6 +447,11 @@ export function PlayerDetail({
   const [careerClubs, setCareerClubs] = useState<{ id: string; name: string }[]>([]);
   const [savingCareer, setSavingCareer] = useState(false);
   const [careerError, setCareerError] = useState('');
+  const [contacts, setContacts] = useState<ContactEntry[]>(player.contacts || []);
+  const [newContactType, setNewContactType] = useState('Primer contacto');
+  const [newContactNote, setNewContactNote] = useState('');
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState('');
   const [showPrintSelector, setShowPrintSelector] = useState(false);
   const [printMode, setPrintMode] = useState<'summary' | 'scouting' | 'data' | 'profile' | 'complete'>('scouting');
   const [lightboxVideo, setLightboxVideo] = useState<VideoType | null>(null);
@@ -429,6 +463,7 @@ export function PlayerDetail({
   const [videoUrlError, setVideoUrlError] = useState('');
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'compressing' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadError, setUploadError] = useState<string>('');
+  const [riskSaving, setRiskSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tabsScrollRef = useRef<HTMLDivElement>(null);
@@ -447,9 +482,10 @@ export function PlayerDetail({
   useEffect(() => {
     let cancelled = false;
     const loadCareerData = async () => {
-      const [entriesResult, clubsResult] = await Promise.all([
+      const [entriesResult, clubsResult, contactsResult] = await Promise.all([
         supabase.from('player_career_entries').select('*').eq('player_id', player.id).order('season', { ascending: false }),
         supabase.from('clubs').select('id,name').order('name'),
+        supabase.from('player_contacts').select('*').eq('player_id', player.id).order('created_at', { ascending: true }),
       ]);
       if (cancelled) return;
       if (!entriesResult.error && entriesResult.data) {
@@ -472,6 +508,7 @@ export function PlayerDetail({
         })));
       }
       if (!clubsResult.error && clubsResult.data) setCareerClubs(clubsResult.data);
+      if (!contactsResult.error && contactsResult.data) setContacts(contactsResult.data);
     };
     loadCareerData();
     return () => { cancelled = true; };
@@ -668,7 +705,7 @@ export function PlayerDetail({
             />
           )
         ) : (
-          <p className="text-sm font-bold text-slate-200 truncate">
+          <p className="text-sm font-bold text-slate-200 leading-snug break-words line-clamp-2">
             {isArray
               ? (value as string[] || []).join(', ') || '—'
               : type === 'select'
@@ -774,6 +811,61 @@ export function PlayerDetail({
     );
   };
 
+  const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
+
+  const renderTagListField = (label: string, field: 'strengths' | 'weaknesses', accentClass: string) => {
+    const items = (formData[field] as string[]) || [];
+    const draft = tagDrafts[field] || '';
+
+    const addTag = () => {
+      const value = draft.trim();
+      if (!value) return;
+      setFormData(prev => ({ ...prev, [field]: [...((prev[field] as string[]) || []), value] }));
+      setTagDrafts(prev => ({ ...prev, [field]: '' }));
+    };
+
+    const removeTag = (index: number) => {
+      setFormData(prev => ({ ...prev, [field]: ((prev[field] as string[]) || []).filter((_, i) => i !== index) }));
+    };
+
+    return (
+      <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 space-y-3">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+        {items.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {items.map((item, index) => (
+              <div key={`${item}-${index}`} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold", accentClass)}>
+                <span>{item}</span>
+                {editMode && (
+                  <button type="button" onClick={() => removeTag(index)} className="text-current opacity-60 hover:opacity-100 transition-opacity">
+                    <XCircle size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500 italic">Sin registros todavía.</p>
+        )}
+        {editMode && (
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setTagDrafts(prev => ({ ...prev, [field]: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+              placeholder="Añadir y pulsar Enter..."
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500/50"
+            />
+            <button type="button" onClick={addTag} className="p-2 bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-all">
+              <Plus size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const getRiskLabel = (risk?: string) => {
     switch (risk) {
       case 'HIGH': return { label: 'ALTO', color: 'text-rose-500 bg-rose-500/10 border-rose-500/20' };
@@ -792,14 +884,192 @@ export function PlayerDetail({
     { id: 'partidos',   label: 'Partidos',          icon: Trophy },
     { id: 'multimedia', label: 'Multimedia',        icon: Video },
     { id: 'actividad',  label: 'Actividad',         icon: TrendingUp },
-    { id: 'decision',   label: 'Decisión Club',     icon: Gavel },
   ];
 
   const currentStatus = formData.status || player.status || 'TRACKING';
   const currentMainPosition = formData.main_position || player.main_position;
   const currentSecondaryPositions = formData.secondary_positions || player.secondary_positions || [];
   const printablePlayer = { ...player, ...formData } as Player;
+  // El nombre corto siempre se deriva del nombre completo (pestaña Datos), nunca del
+  // valor guardado en short_name, que puede quedar desactualizado tras una corrección.
+  const displayShortName = (
+    printablePlayer.full_name
+    || `${printablePlayer.first_name || ''} ${printablePlayer.last_name || ''}`.trim()
+    || printablePlayer.short_name
+    || ''
+  ).toUpperCase();
   const canPrintReport = ['ADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
+  const sortedReports = useMemo(() => (
+    [...reports].sort((a, b) => {
+      const aTime = new Date(a.report_date || a.created_at || 0).getTime();
+      const bTime = new Date(b.report_date || b.created_at || 0).getTime();
+      return bTime - aTime;
+    })
+  ), [reports]);
+
+  const actionTimeline = useMemo<ActionItem[]>(() => {
+    const events: ActionItem[] = [];
+    reports.forEach(r => {
+      const note = r.technical_comment || r.tactical_comment || r.physical_comment || r.mental_comment || r.recommendation || '';
+      events.push({
+        id: `report-${r.id}`,
+        date: r.report_date || r.created_at || '',
+        typeLabel: 'INFORME',
+        note: note.length > 160 ? note.slice(0, 160) + '…' : note,
+        dotColor: 'bg-emerald-500',
+        badgeColor: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+      });
+    });
+    matches.forEach(m => {
+      events.push({
+        id: `match-${m.id}`,
+        date: m.date || m.created_at || '',
+        typeLabel: 'PARTIDO OBSERVADO',
+        note: `${m.home_team} vs ${m.away_team}` + (m.competition ? ` · ${m.competition}` : '') + (m.score ? ` (${m.score})` : ''),
+        dotColor: 'bg-blue-500',
+        badgeColor: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
+      });
+    });
+    contacts.forEach(c => {
+      const cfg = CONTACT_TYPE_CONFIG[c.contact_type] ?? CONTACT_TYPE_CONFIG['Otro'];
+      events.push({
+        id: `contact-${c.id}`,
+        date: c.created_at || '',
+        typeLabel: c.contact_type,
+        note: c.note,
+        dotColor: cfg.dot,
+        badgeColor: cfg.badge,
+        deletable: true,
+        contactRef: c,
+      });
+    });
+    return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [reports, matches, contacts]);
+  const latestReport = sortedReports[0];
+  const reportStrengths = useMemo(() => (
+    Array.from(new Set(sortedReports.flatMap((report) => report.strengths || []).map((item) => item.trim()).filter(Boolean)))
+  ), [sortedReports]);
+  const reportWeaknesses = useMemo(() => (
+    Array.from(new Set(sortedReports.flatMap((report) => report.weaknesses || []).map((item) => item.trim()).filter(Boolean)))
+  ), [sortedReports]);
+  const latestReportNarrative = latestReport
+    ? [
+        latestReport.technical_comment,
+        latestReport.tactical_comment,
+        latestReport.physical_comment,
+        latestReport.mental_comment,
+      ].find((value) => value && value.trim())
+    : undefined;
+  const whyInterestedItems = useMemo(() => (
+    [...sortedReports]
+      .reverse()
+      .map((report) => [
+        report.technical_comment,
+        report.tactical_comment,
+        report.physical_comment,
+        report.mental_comment,
+      ].find((value) => value && value.trim())?.trim() || null)
+      .filter(Boolean) as string[]
+  ), [sortedReports]);
+  const differentialTalentItems = useMemo(() => (
+    [...sortedReports]
+      .reverse()
+      .map((report) => report.key_actions?.trim() || null)
+      .filter(Boolean) as string[]
+  ), [sortedReports]);
+  const latestReportSummary = {
+    whyInterested: printablePlayer.why_interested?.trim() || latestReport?.key_actions || undefined,
+    mainStrength: (printablePlayer.strengths && printablePlayer.strengths.length > 0) ? printablePlayer.strengths.join(' · ') : undefined,
+    mainDoubt: (printablePlayer.weaknesses && printablePlayer.weaknesses.length > 0) ? printablePlayer.weaknesses.join(' · ') : undefined,
+    strengthsList: printablePlayer.strengths || [],
+    weaknessesList: printablePlayer.weaknesses || [],
+    differentialTalent: printablePlayer.differential_talent?.trim() || latestReport?.key_actions || undefined,
+    nextStep: printablePlayer.next_step?.trim() || latestReport?.next_step || undefined,
+  };
+  const whyInterestedDisplayItems = latestReportSummary.whyInterested
+    ? [latestReportSummary.whyInterested]
+    : whyInterestedItems;
+  const differentialTalentDisplayItems = latestReportSummary.differentialTalent
+    ? [latestReportSummary.differentialTalent]
+    : differentialTalentItems;
+  const [newFieldNote, setNewFieldNote] = useState('');
+  const [newFieldNoteScore, setNewFieldNoteScore] = useState(3);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+  const [editingNoteScore, setEditingNoteScore] = useState(3);
+
+  const handleSaveNewFieldNote = () => {
+    const text = newFieldNote.trim();
+    if (!text || !onAddFieldNote) return;
+    onAddFieldNote(text, newFieldNoteScore);
+    setNewFieldNote('');
+    setNewFieldNoteScore(3);
+  };
+
+  const startEditingNote = (noteId: string, currentText: string, currentScore?: number) => {
+    setEditingNoteId(noteId);
+    setEditingNoteText(currentText);
+    setEditingNoteScore(currentScore || 3);
+  };
+
+  const saveEditingNote = () => {
+    if (!editingNoteId || !onUpdateFieldNote) return;
+    onUpdateFieldNote(editingNoteId, editingNoteText, editingNoteScore);
+    setEditingNoteId(null);
+    setEditingNoteText('');
+  };
+
+  const fieldNotes = useMemo(() => (
+    sortedReports
+      .filter((report) => report.technical_comment?.trim())
+      .map((report) => ({
+        id: report.id,
+        text: report.technical_comment!.trim(),
+        score: report.match_rating,
+        date: report.report_date || report.created_at,
+      }))
+  ), [sortedReports]);
+  const renderSummaryTextStack = (
+    items: string[],
+    accentClass: string,
+    emptyText: string,
+    compact = false,
+  ) => {
+    if (!items.length) {
+      return <p className="text-slate-400 text-sm italic">{emptyText}</p>;
+    }
+
+    return (
+      <div className={cn("space-y-3", compact && "space-y-2")}>
+        {items.map((item, index) => (
+          <div
+            key={`${index}-${item.slice(0, 20)}`}
+            className={cn(
+              "rounded-2xl border border-slate-800/70 bg-slate-950/35 px-4 py-3",
+              compact ? "text-sm" : "text-[15px]"
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <span className={cn("mt-1 h-8 w-1 rounded-full shrink-0", accentClass)} />
+              <p className="text-slate-200 font-medium leading-relaxed">{item}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  const handleRiskLevelChange = async (newRisk: Player['risk_level']) => {
+    if (!onUpdatePlayer || !newRisk) return;
+    setRiskSaving(true);
+    setFormData((prev) => ({ ...prev, risk_level: newRisk }));
+    try {
+      await onUpdatePlayer({ ...player, ...formData, risk_level: newRisk });
+    } catch {
+      setFormData((prev) => ({ ...prev, risk_level: player.risk_level }));
+    } finally {
+      setRiskSaving(false);
+    }
+  };
 
   const handlePrintReport = (mode: 'summary' | 'scouting' | 'data' | 'profile' | 'complete') => {
     const cleanup = () => document.body.classList.remove('printing-player-report');
@@ -904,6 +1174,55 @@ export function PlayerDetail({
     if (!entry.id || !window.confirm(`¿Eliminar la temporada ${entry.season} de ${entry.team}?`)) return;
     const { error } = await supabase.from('player_career_entries').delete().eq('id', entry.id);
     if (!error) setCareerEntries(prev => prev.filter(item => item.id !== entry.id));
+  };
+
+  const saveContact = async () => {
+    if (!newContactNote.trim()) {
+      setContactError('La nota de contacto no puede estar vacía.');
+      return;
+    }
+    setSavingContact(true);
+    setContactError('');
+    try {
+      const payload = {
+        player_id: player.id,
+        contact_type: newContactType,
+        note: newContactNote.trim(),
+      };
+      const { data, error } = await supabase.from('player_contacts').insert(payload).select('*').single();
+      if (error) throw error;
+      setContacts(prev => [data, ...prev]);
+      setNewContactNote('');
+      setNewContactType('Primer contacto');
+    } catch (error: any) {
+      setContactError(error?.message?.includes('player_contacts')
+        ? 'Falta crear la tabla en Supabase. Ejecuta player_contacts_migration.sql.'
+        : error?.message || 'No se pudo guardar el contacto.');
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  const deleteContact = async (contact: ContactEntry) => {
+    if (!contact.id || !window.confirm(`¿Eliminar este contacto?`)) return;
+    const { error } = await supabase.from('player_contacts').delete().eq('id', contact.id);
+    if (!error) setContacts(prev => prev.filter(item => item.id !== contact.id));
+  };
+
+  const handleSaveDecision = async (value: string) => {
+    if ((formData.decision_final ?? player.decision_final) === value) return;
+    try {
+      await supabase.from('players').update({ decision_final: value }).eq('id', player.id);
+      setFormData(prev => ({ ...prev, decision_final: value }));
+      const { data } = await supabase
+        .from('player_contacts')
+        .insert({ player_id: player.id, contact_type: 'Cambio de decisión', note: `Decisión del club marcada como: ${value}` })
+        .select('*')
+        .single();
+      if (data) setContacts(prev => [...prev, data]);
+    } catch (err) {
+      console.error('Error saving decision:', err);
+    }
   };
 
   return (
@@ -1067,82 +1386,208 @@ export function PlayerDetail({
               <div className="space-y-8">
                 {/* Cabecera Resumen Ejecutivo */}
                 <div className="bg-slate-900/50 border border-slate-800 rounded-[2.5rem] p-8 relative overflow-hidden shadow-xl">
-                  <div className="absolute top-0 right-0 p-8">
+                  <div className="hidden absolute top-0 right-0 p-8">
                      <div className="flex flex-col items-end gap-2">
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Riesgo Captación</span>
-                        <div className={cn("px-4 py-1.5 rounded-full text-xs font-black border", getRiskLabel(player.risk_level).color)}>
-                          {getRiskLabel(player.risk_level).label}
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={formData.risk_level || player.risk_level || ''}
+                            onChange={(e) => handleRiskLevelChange((e.target.value || undefined) as Player['risk_level'])}
+                            disabled={!onUpdatePlayer || riskSaving}
+                            className={cn(
+                              "px-4 py-1.5 rounded-full text-xs font-black border bg-slate-950 outline-none transition-all",
+                              getRiskLabel(formData.risk_level || player.risk_level).color,
+                              (!onUpdatePlayer || riskSaving) && "opacity-70 cursor-not-allowed"
+                            )}
+                          >
+                            <option value="">N/A</option>
+                            <option value="LOW">BAJO</option>
+                            <option value="MEDIUM">MEDIO</option>
+                            <option value="HIGH">ALTO</option>
+                          </select>
+                          {riskSaving && <Loader2 size={14} className="text-emerald-400 animate-spin" />}
                         </div>
                      </div>
                   </div>
                   <div className="flex items-center gap-3 mb-8">
                      <Target size={24} className="text-emerald-500" />
-                     <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">Resumen Ejecutivo</h2>
+                     <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">Resumen</h2>
                   </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-8">
                      <div className="space-y-6">
-                        <div>
-                          <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-3">¿Por qué nos interesa?</h3>
-                          <p className="text-slate-200 text-lg font-medium leading-relaxed italic">
-                            "{player.why_interested || 'Puntualizar motivo de interés...'}"
-                          </p>
-                        </div>
                         <div className="grid grid-cols-2 gap-6">
                            <div>
                               <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Zap size={10}/> Fortaleza</p>
-                              <p className="text-sm font-bold text-white">{player.main_strength || '---'}</p>
+                              {latestReportSummary.strengthsList.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {latestReportSummary.strengthsList.map((item, index) => (
+                                    <li key={index} className="text-sm font-bold text-white flex items-start gap-2">
+                                      <span className="text-emerald-500 mt-1.5 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+                                      <span>{item}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-sm font-bold text-white">---</p>
+                              )}
                            </div>
                            <div>
                               <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1 flex items-center gap-1"><AlertCircle size={10}/> Duda</p>
-                              <p className="text-sm font-bold text-white">{player.main_doubt || '---'}</p>
+                              {latestReportSummary.weaknessesList.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {latestReportSummary.weaknessesList.map((item, index) => (
+                                    <li key={index} className="text-sm font-bold text-white flex items-start gap-2">
+                                      <span className="text-rose-500 mt-1.5 w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                                      <span>{item}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-sm font-bold text-white">---</p>
+                              )}
                            </div>
+                        </div>
+                        <div>
+                          <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-3">¿Por qué nos interesa?</h3>
+                          {renderSummaryTextStack(
+                            whyInterestedDisplayItems,
+                            'bg-emerald-400',
+                            'Sin texto vinculado en informes todavía.'
+                          )}
+                        </div>
+                        <div className="pt-6 border-t border-slate-800/70">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-1.5 h-5 bg-amber-500 rounded-full" />
+                            <h3 className="text-base font-black text-slate-100 italic tracking-tight uppercase">Notas de campo</h3>
+                          </div>
+
+                          {fieldNotes.length > 0 ? (
+                            <div className="space-y-4">
+                              {fieldNotes.map((note) => (
+                                <div
+                                  key={note.id}
+                                  className="w-full bg-slate-950/35 border border-slate-800/80 p-5 rounded-[2rem] transition-all shadow-lg"
+                                >
+                                  <p className="text-[12px] text-slate-300 italic leading-relaxed mb-5">
+                                    "{note.text}"
+                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <div className="px-2 py-0.5 bg-slate-950 text-[9px] font-black text-amber-500 rounded-lg border border-slate-800 italic">
+                                      SCORE: {note.score || 'N/A'}
+                                    </div>
+                                    <span className="text-[9px] font-black text-slate-600 uppercase tabular-nums">
+                                      {note.date ? format(new Date(note.date), 'dd MMM yy', { locale: es }) : 'S/F'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-[2rem] border border-dashed border-slate-800 bg-slate-950/20 p-6 text-center">
+                              <p className="text-sm font-bold text-slate-500">Sin notas de campo registradas aún.</p>
+                            </div>
+                          )}
                         </div>
                      </div>
-                     <div className="bg-slate-950/50 rounded-3xl p-8 border border-slate-800/50 space-y-6">
-                        <div className="flex items-start gap-4">
-                           <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500 shrink-0"><Star size={20} /></div>
+                     <div className="bg-blue-500/10 rounded-[2rem] p-7 border border-blue-500/20 space-y-6">
+                        <div className="rounded-[1.75rem] border border-amber-400/20 bg-slate-950/35 p-6">
+                           <div className="flex items-center gap-3 mb-4">
+                             <div className="p-3 bg-amber-500/15 rounded-2xl text-amber-400 shrink-0"><Star size={20} /></div>
+                             <p className="text-[10px] font-black text-amber-300 uppercase tracking-[0.22em]">Talento Diferencial</p>
+                           </div>
                            <div>
-                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Talento Diferencial</p>
-                              <p className="text-sm text-slate-200 font-bold mt-1">{player.differential_talent || 'Detectar talento clave...'}</p>
+                             {renderSummaryTextStack(
+                               differentialTalentDisplayItems,
+                               'bg-amber-400',
+                               'Sin evidencia registrada en informes.',
+                               true
+                             )}
                            </div>
                         </div>
-                        <div className="flex items-start gap-4">
-                           <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500 shrink-0"><Shield size={20} /></div>
-                           <div>
+                        <div className="rounded-[1.75rem] border border-blue-400/20 bg-slate-950/30 p-6">
+                           <div className="flex items-start gap-4">
+                           <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400 shrink-0"><Shield size={20} /></div>
+                           <div className="flex-1">
                               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Encaje en el Club</p>
-                              <p className="text-sm text-slate-200 font-bold mt-1">{formatClubFitDisplay(player)}</p>
+                              <div className="mt-3 flex items-end gap-2">
+                                <p className="text-[56px] leading-none font-black italic text-blue-400">
+                                  {player.rating_club_fit != null ? formatRating(player.rating_club_fit) : '—'}
+                                </p>
+                                <p className="text-base font-black text-blue-200/50 mb-1">/5.0</p>
+                              </div>
+                              <p className="text-sm text-slate-200 font-bold mt-3">{formatClubFitDisplay(player)}</p>
+                              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                                <div
+                                  className="h-full rounded-full bg-blue-400"
+                                  style={{ width: `${Math.max(0, Math.min(100, (Number(player.rating_club_fit) || 0) * 20))}%` }}
+                                />
+                              </div>
+                           </div>
                            </div>
                         </div>
-                        <div className="pt-6 border-t border-slate-800">
-                          <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Próximo Paso</p>
-                          <p className="text-lg font-black text-white italic mt-1 uppercase">{player.next_step || 'OBSERVACIÓN'}</p>
+                        <div className="hidden pt-6 border-t border-blue-500/10">
+                          <div className="rounded-[1.75rem] border border-slate-800/80 bg-slate-950/25 p-6 space-y-5">
+                            <div>
+                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Riesgo Captación</p>
+                              <div className="mt-3 flex items-center gap-2">
+                                <select
+                                  value={formData.risk_level || player.risk_level || ''}
+                                  onChange={(e) => handleRiskLevelChange((e.target.value || undefined) as Player['risk_level'])}
+                                  disabled={!onUpdatePlayer || riskSaving}
+                                  className={cn(
+                                    "px-4 py-1.5 rounded-full text-xs font-black border bg-slate-950 outline-none transition-all",
+                                    getRiskLabel(formData.risk_level || player.risk_level).color,
+                                    (!onUpdatePlayer || riskSaving) && "opacity-70 cursor-not-allowed"
+                                  )}
+                                >
+                                  <option value="">N/A</option>
+                                  <option value="LOW">BAJO</option>
+                                  <option value="MEDIUM">MEDIO</option>
+                                  <option value="HIGH">ALTO</option>
+                                </select>
+                                {riskSaving && <Loader2 size={14} className="text-emerald-400 animate-spin" />}
+                              </div>
+                            </div>
+                            <div className="pt-5 border-t border-slate-800/70">
+                              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Próximo Paso</p>
+                              <p className="text-lg font-black text-white italic mt-2 uppercase leading-snug break-words">{latestReportSummary.nextStep || 'OBSERVACIÓN'}</p>
+                            </div>
+                          </div>
                         </div>
                      </div>
+                  </div>
+
+                  <div className="mt-8 rounded-[2rem] border border-slate-800/80 bg-slate-950/25 p-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6 items-start">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Riesgo Captación</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <select
+                            value={formData.risk_level || player.risk_level || ''}
+                            onChange={(e) => handleRiskLevelChange((e.target.value || undefined) as Player['risk_level'])}
+                            disabled={!onUpdatePlayer || riskSaving}
+                            className={cn(
+                              "px-4 py-1.5 rounded-full text-xs font-black border bg-slate-950 outline-none transition-all",
+                              getRiskLabel(formData.risk_level || player.risk_level).color,
+                              (!onUpdatePlayer || riskSaving) && "opacity-70 cursor-not-allowed"
+                            )}
+                          >
+                            <option value="">N/A</option>
+                            <option value="LOW">BAJO</option>
+                            <option value="MEDIUM">MEDIO</option>
+                            <option value="HIGH">ALTO</option>
+                          </select>
+                          {riskSaving && <Loader2 size={14} className="text-emerald-400 animate-spin" />}
+                        </div>
+                      </div>
+                      <div className="lg:border-l lg:border-slate-800/70 lg:pl-6">
+                        <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Próximo Paso</p>
+                        <p className="text-lg font-black text-white italic mt-2 uppercase leading-snug break-words">{latestReportSummary.nextStep || 'OBSERVACIÓN'}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-900/30 border border-slate-800/50 rounded-[2rem] p-6">
-                     <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Zap size={14} /> Fortalezas</h3>
-                     <ul className="space-y-2">
-                        {(player.strengths || []).map((s, i) => (
-                           <li key={i} className="flex items-center gap-2 text-xs text-slate-300">
-                              <CheckCircle2 size={14} className="text-emerald-500" /> {s}
-                           </li>
-                        ))}
-                     </ul>
-                  </div>
-                  <div className="bg-slate-900/30 border border-slate-800/50 rounded-[2rem] p-6">
-                     <h3 className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Shield size={14} /> Debilidades</h3>
-                     <ul className="space-y-2">
-                        {(player.weaknesses || []).map((w, i) => (
-                           <li key={i} className="flex items-center gap-2 text-xs text-slate-300">
-                              <XCircle size={14} className="text-rose-500" /> {w}
-                           </li>
-                        ))}
-                     </ul>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -1166,7 +1611,7 @@ export function PlayerDetail({
                          
                          <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4 w-full">
                             {[
-                              { label: 'NOMBRE CORTO', value: player.short_name || player.first_name },
+                              { label: 'NOMBRE CORTO', value: (player.full_name || `${player.first_name || ''} ${player.last_name || ''}`.trim() || player.short_name || '').toUpperCase() },
                               { label: 'CLUB', value: player.club_name },
                               { label: 'COMPETICIÓN', value: player.league || player.competition || 'No reg.' },
                               { label: 'POSICIÓN', value: player.main_position },
@@ -1178,7 +1623,7 @@ export function PlayerDetail({
                             ].map((item, i) => (
                               <div key={i} className="flex flex-col gap-1 border-b border-slate-800/50 pb-2 hover:border-emerald-500/30 transition-colors">
                                 <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest leading-none">{item.label}</span>
-                                <span className="text-xs font-bold text-slate-200 uppercase truncate">{item.value || '---'}</span>
+                                <span className="text-xs font-bold text-slate-200 uppercase leading-snug break-words line-clamp-2">{item.value || '---'}</span>
                               </div>
                             ))}
                          </div>
@@ -1210,8 +1655,11 @@ export function PlayerDetail({
 
                       {/* TRAYECTORIA TABLE (Image 2 style) */}
                       <div className="bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 shadow-xl backdrop-blur-sm overflow-hidden min-h-[300px]">
-                        <div className="flex items-center justify-between gap-3 mb-8">
-                           <h3 className="text-[11px] font-black text-white uppercase tracking-[0.3em] bg-slate-950/80 px-6 py-2.5 rounded-full italic border border-slate-800">TRAYECTORIA</h3>
+                        <div className="mb-8 flex items-start justify-between gap-3">
+                           <div className="space-y-2">
+                             <h3 className="text-[11px] font-black text-white uppercase tracking-[0.3em] bg-slate-950/80 px-6 py-2.5 rounded-full italic border border-slate-800">TRAYECTORIA</h3>
+                             <p className="pl-1 text-[10px] uppercase tracking-[0.22em] text-slate-500">Haz clic en una fila para editarla</p>
+                           </div>
                            <button onClick={() => openCareerModal()} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-[9px] font-black uppercase text-slate-950 hover:bg-emerald-400"><Plus size={14} /> Añadir temporada</button>
                         </div>
                         <div className="overflow-x-auto no-scrollbar">
@@ -1234,7 +1682,11 @@ export function PlayerDetail({
                              <tbody className="divide-y divide-slate-800/50">
                                {careerEntries.length > 0 ? (
                                   careerEntries.map((t, i) => (
-                                    <tr key={t.id || i} className="hover:bg-slate-800/20 transition-colors">
+                                    <tr
+                                      key={t.id || i}
+                                      onClick={() => openCareerModal(t)}
+                                      className="hover:bg-slate-800/20 transition-colors cursor-pointer"
+                                    >
                                      <td className="px-3 py-3 whitespace-nowrap">{t.season}</td>
                                      <td className="px-3 py-3 text-white truncate max-w-[130px]">{t.club_name_snapshot || careerClubs.find(club => club.id === t.club_id)?.name || '—'}</td>
                                      <td className="px-3 py-3 text-white truncate max-w-[120px]">{t.team}</td>
@@ -1245,7 +1697,30 @@ export function PlayerDetail({
                                       <td className="px-3 py-3 text-center text-emerald-500">{t.goals}</td>
                                       <td className="px-3 py-3 text-center text-amber-500">{t.yellow_cards}</td>
                                       <td className="px-3 py-3 text-center text-red-500">{t.red_cards}</td>
-                                      <td className="px-3 py-3"><div className="flex justify-center gap-1"><button onClick={() => openCareerModal(t)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-emerald-400" title="Editar"><Edit3 size={13} /></button><button onClick={() => deleteCareerEntry(t)} className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400" title="Eliminar"><Trash2 size={13} /></button></div></td>
+                                      <td className="px-3 py-3">
+                                        <div className="flex justify-center gap-1">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openCareerModal(t);
+                                            }}
+                                            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-emerald-400"
+                                            title="Editar"
+                                          >
+                                            <Edit3 size={13} />
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              deleteCareerEntry(t);
+                                            }}
+                                            className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400"
+                                            title="Eliminar"
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
+                                        </div>
+                                      </td>
                                    </tr>
                                  ))
                                ) : (
@@ -1771,6 +2246,153 @@ export function PlayerDetail({
                   </div>
                 </div>
 
+                {/* Notas de campo: alta, corrección y borrado */}
+                <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-5 bg-amber-500 rounded-full" />
+                    <h3 className="text-base font-black text-slate-100 italic tracking-tight uppercase">Notas de campo</h3>
+                  </div>
+
+                  {onAddFieldNote && (
+                    <div className="bg-slate-950/35 border border-slate-800/80 rounded-[1.75rem] p-4">
+                      <div className="flex items-start gap-2">
+                        <textarea
+                          rows={2}
+                          placeholder="Escribe una nota rápida de campo..."
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[12px] text-slate-200 outline-none resize-none focus:border-amber-500/50"
+                          value={newFieldNote}
+                          onChange={(e) => setNewFieldNote(e.target.value)}
+                        />
+                        <SpeechToTextButton onTranscript={(t) => setNewFieldNote((prev) => (prev ? `${prev} ${t}` : t))} />
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-1">Score</span>
+                          {[1, 2, 3, 4, 5].map((v) => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setNewFieldNoteScore(v)}
+                              className="p-0.5"
+                              title={`${v} estrella${v > 1 ? 's' : ''}`}
+                            >
+                              <Star size={16} className={cn(newFieldNoteScore >= v ? "text-amber-400 fill-current" : "text-slate-700")} />
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveNewFieldNote}
+                          disabled={!newFieldNote.trim()}
+                          className="px-4 py-1.5 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Guardar nota
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {fieldNotes.length > 0 ? (
+                    <div className="space-y-4">
+                      {fieldNotes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="w-full bg-slate-950/35 border border-slate-800/80 p-5 rounded-[2rem] transition-all shadow-lg"
+                        >
+                          {editingNoteId === note.id ? (
+                            <div className="mb-5">
+                              <textarea
+                                rows={3}
+                                autoFocus
+                                className="w-full bg-slate-950 border border-amber-500/40 rounded-xl px-3 py-2 text-[12px] text-slate-200 outline-none resize-none"
+                                value={editingNoteText}
+                                onChange={(e) => setEditingNoteText(e.target.value)}
+                              />
+                              <div className="flex items-center justify-between mt-2">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-1">Score</span>
+                                  {[1, 2, 3, 4, 5].map((v) => (
+                                    <button
+                                      key={v}
+                                      type="button"
+                                      onClick={() => setEditingNoteScore(v)}
+                                      className="p-0.5"
+                                      title={`${v} estrella${v > 1 ? 's' : ''}`}
+                                    >
+                                      <Star size={16} className={cn(editingNoteScore >= v ? "text-amber-400 fill-current" : "text-slate-700")} />
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingNoteId(null); setEditingNoteText(''); }}
+                                  className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white transition-all"
+                                  title="Cancelar"
+                                >
+                                  <XCircle size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={saveEditingNote}
+                                  disabled={!editingNoteText.trim()}
+                                  className="p-2 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-emerald-400 hover:bg-emerald-500/25 transition-all disabled:opacity-40"
+                                  title="Guardar"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[12px] text-slate-300 italic leading-relaxed mb-5">
+                              "{note.text}"
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="px-2 py-0.5 bg-slate-950 text-[9px] font-black text-amber-500 rounded-lg border border-slate-800 italic">
+                                SCORE: {note.score || 'N/A'}
+                              </div>
+                              <span className="text-[9px] font-black text-slate-600 uppercase tabular-nums">
+                                {note.date ? format(new Date(note.date), 'dd MMM yy', { locale: es }) : 'S/F'}
+                              </span>
+                            </div>
+                            {editingNoteId !== note.id && (onUpdateFieldNote || onDeleteFieldNote) && (
+                              <div className="flex items-center gap-1">
+                                {onUpdateFieldNote && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditingNote(note.id, note.text, note.score)}
+                                    className="p-1.5 text-slate-500 hover:text-amber-400 transition-all"
+                                    title="Corregir nota"
+                                  >
+                                    <Edit3 size={13} />
+                                  </button>
+                                )}
+                                {onDeleteFieldNote && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteFieldNote(note.id)}
+                                    className="p-1.5 text-slate-500 hover:text-rose-400 transition-all"
+                                    title="Borrar nota"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[2rem] border border-dashed border-slate-800 bg-slate-950/20 p-6 text-center">
+                      <p className="text-sm font-bold text-slate-500">Sin notas de campo registradas aún.</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Visual Indicators Summary */}
                 {(() => {
                   const globalCalc = computeGlobalRating(formData);
@@ -1889,10 +2511,22 @@ export function PlayerDetail({
                   </div>
                 </div>
 
+                {/* Fortalezas / Debilidades como lista editable */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                   {renderTagListField('Fortalezas', 'strengths', 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400')}
+                   {renderTagListField('Debilidades', 'weaknesses', 'border-rose-500/30 bg-rose-500/10 text-rose-400')}
+                </div>
+
                 {/* Analysis Text Blocks */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                   {renderTextAreaField('Por qué nos interesa', 'why_interested', 'Resumen ejecutivo editable para la hoja de resumen...')}
+                   {renderTextAreaField('Fortaleza Principal', 'main_strength', 'La virtud que más pesa en la valoración...')}
+                   {renderTextAreaField('Principal Duda', 'main_doubt', 'Lo que genera incertidumbre sobre el jugador...')}
+                   {renderTextAreaField('Próximo Paso', 'next_step', 'Siguiente acción de seguimiento (nuevo visionado, contacto, etc.)...')}
                    {renderTextAreaField('Informe Técnico', 'technical_profile', 'Lectura técnica detallada del jugador...')}
                    {renderTextAreaField('Informe Táctico', 'tactical_profile', 'Lectura táctica y comportamiento en juego...')}
+                   {renderTextAreaField('Informe Físico', 'physical_profile', 'Lectura física y atlética del jugador...')}
+                   {renderTextAreaField('Informe Mental', 'mental_profile', 'Carácter, competitividad y actitud del jugador...')}
                    {renderTextAreaField('Talento Diferencial', 'differential_talent', '¿Qué lo hace único en su categoría?')}
                    {renderTextAreaField('Riesgos Detectados', 'risks_analysis', 'Posibles frenos en su evolución (lesiones, entorno, carácter)...')}
                    {renderTextAreaField('Margen de Mejora', 'improvement_margin')}
@@ -2075,26 +2709,138 @@ export function PlayerDetail({
 
             {activeTab === 'actividad' && (
               <div className="space-y-6">
-                {/* — Seguimiento — */}
+
+                {/* — Decisión del Club — */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-7">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Gavel size={16} className="text-emerald-500 shrink-0" />
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest">Decisión del Club</h3>
+                    <span className="ml-auto text-[9px] font-bold text-slate-600 uppercase tracking-widest hidden sm:block">Cada cambio se registra con fecha en el historial</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: 'OBSERVACIÓN CONTINUA', border: 'border-slate-700 hover:border-slate-500', active: 'border-slate-400 bg-slate-800', text: 'text-slate-200' },
+                      { value: 'POSPONER DECISIÓN',    border: 'border-amber-900/40 hover:border-amber-600/60', active: 'border-amber-500/80 bg-amber-500/10', text: 'text-amber-300' },
+                      { value: 'RECOMENDAR FICHAJE',   border: 'border-emerald-900/40 hover:border-emerald-600/60', active: 'border-emerald-500/80 bg-emerald-500/10', text: 'text-emerald-300' },
+                      { value: 'DESCARTAR',            border: 'border-rose-900/40 hover:border-rose-600/60', active: 'border-rose-500/80 bg-rose-500/10', text: 'text-rose-300' },
+                    ] as const).map(opt => {
+                      const isCurrent = (formData.decision_final ?? player.decision_final) === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleSaveDecision(opt.value)}
+                          className={cn(
+                            'w-full py-2.5 px-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-between gap-1 active:scale-[0.99]',
+                            opt.text,
+                            isCurrent ? opt.active : opt.border
+                          )}
+                        >
+                          <span className="truncate">{opt.value}</span>
+                          {isCurrent && <Check size={12} className="shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* — Historial de Acciones — */}
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-8">
-                  <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-                    <TrendingUp size={14} className="text-emerald-500 shrink-0" /> Notas de Seguimiento
-                  </h3>
-                  <div className="space-y-6 relative before:absolute before:left-[10px] before:top-2 before:bottom-0 before:w-px before:bg-slate-800">
-                    {(player.tracking_history || [
-                      { date: new Date().toISOString(), note: 'Añadido inicialmente al radar tras observar potencial en partido de liga.', status: 'TRACKING' }
-                    ]).map((h, i) => (
-                      <div key={i} className="flex gap-4 relative min-w-0">
-                        <div className={cn("w-5 h-5 rounded-full border-4 border-slate-950 shrink-0 z-10 mt-0.5", getTrafficLightColor(h.status))} />
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{format(new Date(h.date), "dd MMM yyyy", { locale: es })}</span>
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[8px] font-bold text-slate-300 uppercase">{h.status}</span>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                      <TrendingUp size={14} className="text-emerald-500 shrink-0" /> Historial de Acciones
+                    </h3>
+                    <span className="text-[9px] font-black text-slate-600 bg-slate-900 border border-slate-800 rounded-full px-2.5 py-1 uppercase tracking-widest">
+                      {actionTimeline.length} evento{actionTimeline.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    {actionTimeline.map((event) => (
+                      <div key={event.id} className="flex gap-4 relative min-w-0">
+                        <div className="flex flex-col items-center">
+                          <div className={cn("w-3 h-3 rounded-full shrink-0 z-10 mt-1.5 ring-4 ring-slate-900", event.dotColor)} />
+                          <div className="w-px flex-1 bg-slate-800 mt-1 mb-1 min-h-[1rem]" />
+                        </div>
+                        <div className="pb-5 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-widest", event.badgeColor)}>
+                              {event.typeLabel}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-600">
+                              {format(new Date(event.date), "dd MMM yyyy", { locale: es })}
+                            </span>
+                            {event.deletable && event.contactRef && (
+                              <button
+                                onClick={() => deleteContact(event.contactRef!)}
+                                className="ml-auto p-1 text-slate-700 hover:text-rose-400 transition-all rounded-lg hover:bg-rose-500/10"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
                           </div>
-                          <p className="text-xs font-medium text-slate-200 leading-relaxed italic break-words">"{h.note}"</p>
+                          {event.note && <p className="text-sm text-slate-300 leading-relaxed">{event.note}</p>}
                         </div>
                       </div>
                     ))}
+
+                    {/* Registrar nuevo contacto al final del timeline */}
+                    <div className="flex gap-4 min-w-0">
+                      <div className="flex flex-col items-center pt-1">
+                        <div className="w-3 h-3 rounded-full bg-slate-800 border border-dashed border-slate-600 shrink-0 z-10" />
+                      </div>
+                      <div className="pb-1 min-w-0 flex-1">
+                        {actionTimeline.length === 0 && (
+                          <p className="text-[10px] font-bold text-slate-700 uppercase tracking-widest mb-3">Sin acciones — añade el primer contacto</p>
+                        )}
+                        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="sm:w-52 shrink-0 space-y-1.5">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Tipo</label>
+                              <select
+                                value={newContactType}
+                                onChange={(e) => setNewContactType(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-amber-500 transition-all"
+                              >
+                                <option>Primer contacto</option>
+                                <option>Segundo contacto</option>
+                                <option>Contacto con tutor</option>
+                                <option>Contacto con agente</option>
+                                <option>Oferta formal</option>
+                                <option>Negociación</option>
+                                <option>Acuerdo</option>
+                                <option>Otro</option>
+                              </select>
+                            </div>
+                            <div className="flex-1 space-y-1.5">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Nota</label>
+                              <textarea
+                                value={newContactNote}
+                                onChange={(e) => setNewContactNote(e.target.value)}
+                                placeholder="Qué ocurrió, opinión del entorno, acuerdos alcanzados..."
+                                rows={3}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-amber-500 transition-all resize-none"
+                              />
+                            </div>
+                          </div>
+                          {contactError && (
+                            <p className="flex items-center gap-1.5 text-[10px] text-rose-400">
+                              <AlertCircle size={11} className="shrink-0" /> {contactError}
+                            </p>
+                          )}
+                          <div className="flex justify-end">
+                            <button
+                              onClick={saveContact}
+                              disabled={savingContact || !newContactNote.trim()}
+                              className="flex items-center gap-2 px-5 py-2 bg-amber-600 text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-amber-500 disabled:opacity-40 transition-all active:scale-95"
+                            >
+                              {savingContact ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                              {savingContact ? 'Guardando...' : 'Registrar Contacto'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2111,10 +2857,15 @@ export function PlayerDetail({
                             <MousePointer2 size={14} className="text-slate-500" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-slate-200 break-words">
+                            {(entry.field === 'registro creado' || entry.field === 'última edición') && (
+                              <p className="text-xs font-bold text-slate-200 break-words">
+                                <span className="text-emerald-400">{entry.field}</span>
+                              </p>
+                            )}
+                            <p className={cn("text-xs font-bold text-slate-200 break-words", (entry.field === 'registro creado' || entry.field === 'última edición') && "hidden")}>
                               Se actualizó <span className="text-emerald-400">{entry.field}</span>
                             </p>
-                            <p className="text-[11px] text-slate-400 mt-0.5 break-words">
+                            <p className={cn("text-[11px] text-slate-400 mt-0.5 break-words", (entry.field === 'registro creado' || entry.field === 'última edición') && "hidden")}>
                               <span className="text-slate-600">{entry.old_value || 'vacío'}</span>
                               <span className="mx-1 text-slate-600">→</span>
                               <span>{entry.new_value || 'vacío'}</span>
@@ -2137,33 +2888,6 @@ export function PlayerDetail({
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'decision' && (
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-8 max-w-2xl mx-auto text-center space-y-6">
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto text-emerald-500">
-                  <Gavel size={32} />
-                </div>
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tighter">Decisión del Club</h3>
-                  <p className="text-slate-500 text-xs sm:text-sm mt-2 font-bold">Evaluación final para la toma de decisiones ejecutivas</p>
-                </div>
-
-                <div className="p-5 sm:p-8 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-left">
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Estado Final Candidato</p>
-                      <p className="text-base font-black text-emerald-500 uppercase mt-1 italic break-words">{player.decision_final || 'OBSERVACIÓN CONTINUA'}</p>
-                    </div>
-                    <div className="sm:text-right">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Fecha Estimada</p>
-                      <p className="text-sm font-bold text-white mt-1 italic">{player.decision_date || 'PRÓXIMO MERCADO'}</p>
-                    </div>
-                  </div>
-                  <button className="w-full py-4 bg-emerald-600 text-slate-950 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg active:scale-95">RECOMENDAR FICHAJE</button>
-                  <button className="w-full py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:text-white transition-all">POSPONER DECISIÓN</button>
                 </div>
               </div>
             )}
@@ -2283,7 +3007,7 @@ export function PlayerDetail({
               <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
               <div className="pdf-full-data-grid">
                 {[
-                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', printablePlayer.short_name],
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displayShortName],
                   ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
                   ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
                   ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],
@@ -2317,7 +3041,7 @@ export function PlayerDetail({
               <div className="pdf-card-heading"><span>Datos principales</span><small>Perfil</small></div>
               <div className="pdf-data-grid">
                 {[
-                  ['Nombre corto', printablePlayer.short_name || printablePlayer.first_name],
+                  ['Nombre corto', displayShortName],
                   ['Competición', printablePlayer.league || printablePlayer.competition],
                   ['Nacimiento', printablePlayer.birth_date || printablePlayer.birth_year],
                   ['Edad', printablePlayer.calculated_age ? `${printablePlayer.calculated_age} años` : '—'],
@@ -2427,7 +3151,7 @@ export function PlayerDetail({
               <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
               <div className="pdf-full-data-grid">
                 {[
-                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', printablePlayer.short_name],
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displayShortName],
                   ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
                   ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
                   ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],

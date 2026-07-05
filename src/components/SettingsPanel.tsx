@@ -1,8 +1,8 @@
 import type React from 'react';
-import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
-import { cn } from '../lib/utils';
+import { cn, calculateCategory } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import type { UserRole, Profile } from '../types';
 import {
@@ -572,6 +572,13 @@ function UsersTab({ currentUserRole }: { currentUserRole: UserRole }) {
   );
 }
 
+// ─── Season helper ──────────────────────────────────────────────────────────
+function advanceSeason(current: string): string {
+  const match = current.match(/^(\d{4})\/(\d{4})$/);
+  if (!match) return current;
+  return `${parseInt(match[1]) + 1}/${parseInt(match[2]) + 1}`;
+}
+
 // ─── Main SettingsPanel ───────────────────────────────────────────────────────
 export function SettingsPanel({
   userRole,
@@ -596,6 +603,10 @@ export function SettingsPanel({
     { id: 'mentalidad', label: 'Mentalidad', weight: initialWeights.mentality },
     { id: 'potencial', label: 'Potencial', weight: initialWeights.potential },
   ]);
+
+  const [rolloverLoading, setRolloverLoading] = useState(false);
+  const [rolloverConfirm, setRolloverConfirm] = useState(false);
+  const [rolloverResult, setRolloverResult] = useState<{ ok: boolean; msg: string; created: number; skipped: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -739,6 +750,88 @@ export function SettingsPanel({
       alert('Información del club actualizada correctamente.');
     } catch (err: any) {
       alert('Error al guardar info del club: ' + err.message);
+    }
+  };
+
+  const handleSeasonRollover = async () => {
+    if (!clubId) return;
+    setRolloverLoading(true);
+    setRolloverResult(null);
+    try {
+      // Obtener temporada actual
+      const { data: clubData, error: clubErr } = await supabase
+        .from('clubs').select('current_season, name').eq('id', clubId).single();
+      if (clubErr || !clubData) throw new Error('No se pudo cargar el club');
+      const currentSeason = clubData.current_season as string;
+      const nextSeason = advanceSeason(currentSeason);
+
+      // Obtener todos los jugadores
+      const { data: playersData, error: playersErr } = await supabase
+        .from('players').select('id, club_id, club_name, current_team_id, birth_year, birth_date, league, competition');
+      if (playersErr) throw playersErr;
+      if (!playersData || playersData.length === 0) {
+        setRolloverResult({ ok: true, msg: 'No hay jugadores en la base de datos.', created: 0, skipped: 0 });
+        setRolloverLoading(false);
+        return;
+      }
+
+      // Mapa de equipos
+      const { data: teamsData } = await supabase.from('teams').select('id, name');
+      const teamMap: Record<string, string> = {};
+      (teamsData || []).forEach((t: any) => { teamMap[t.id] = t.name; });
+
+      // Mapa de clubs
+      const { data: clubsData } = await supabase.from('clubs').select('id, name');
+      const clubMap: Record<string, string> = {};
+      (clubsData || []).forEach((c: any) => { clubMap[c.id] = c.name; });
+
+      // Entradas existentes para la temporada actual (evitar duplicados)
+      const { data: existing } = await supabase
+        .from('player_career_entries').select('player_id').eq('season', currentSeason);
+      const existingIds = new Set<string>((existing || []).map((e: any) => e.player_id));
+
+      // Construir entradas
+      const toInsert: any[] = [];
+      let skipped = 0;
+      for (const player of playersData as any[]) {
+        if (existingIds.has(player.id)) { skipped++; continue; }
+        toInsert.push({
+          player_id: player.id,
+          club_id: player.club_id || null,
+          club_name_snapshot: (player.club_id && clubMap[player.club_id]) || player.club_name || 'Club no especificado',
+          season: currentSeason,
+          team_name: (player.current_team_id && teamMap[player.current_team_id]) || 'Sin equipo asignado',
+          category: calculateCategory(player.birth_year, player.birth_date),
+          competition: player.league || player.competition || '',
+          matches_played: 0,
+          minutes_played: 0,
+          goals: 0,
+          yellow_cards: 0,
+          red_cards: 0,
+        });
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase.from('player_career_entries').insert(toInsert);
+        if (insertErr) throw insertErr;
+      }
+
+      // Avanzar temporada en el club
+      const { error: updateErr } = await supabase.from('clubs').update({ current_season: nextSeason }).eq('id', clubId);
+      if (updateErr) throw updateErr;
+
+      setSeason(nextSeason);
+      setRolloverConfirm(false);
+      setRolloverResult({
+        ok: true,
+        msg: `Temporada ${currentSeason} cerrada. Nueva temporada activa: ${nextSeason}.`,
+        created: toInsert.length,
+        skipped,
+      });
+    } catch (err: any) {
+      setRolloverResult({ ok: false, msg: err?.message || 'Error desconocido', created: 0, skipped: 0 });
+    } finally {
+      setRolloverLoading(false);
     }
   };
 
@@ -912,6 +1005,101 @@ export function SettingsPanel({
                   GUARDAR CAMBIOS
                 </button>
               </div>
+
+              {/* ── Cierre de Temporada (solo ADMIN) ────────────────────── */}
+              {currentRole === 'ADMIN' && (
+                <div className="border-t border-slate-800 pt-8 space-y-5">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <Calendar size={16} className="text-amber-400" />
+                      Cierre de Temporada
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                      Registra automáticamente un historial de trayectoria para cada jugador con sus datos actuales
+                      (equipo, categoría, competición) y estadísticas en cero. Después avanza la temporada activa del club.
+                    </p>
+                  </div>
+
+                  {/* Preview temporada */}
+                  <div className="flex items-center gap-4 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 w-fit">
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Temporada actual</p>
+                      <p className="text-lg font-black text-slate-200">{season}</p>
+                    </div>
+                    <ArrowRight size={18} className="text-slate-600 shrink-0" />
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-amber-600/70 uppercase tracking-widest mb-1">Nueva temporada</p>
+                      <p className="text-lg font-black text-amber-400">{advanceSeason(season)}</p>
+                    </div>
+                  </div>
+
+                  {/* Resultado */}
+                  {rolloverResult && (
+                    <div className={cn(
+                      "flex items-start gap-3 p-4 rounded-xl border text-sm",
+                      rolloverResult.ok
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                    )}>
+                      {rolloverResult.ok
+                        ? <CheckCircle size={16} className="shrink-0 mt-0.5" />
+                        : <AlertCircle size={16} className="shrink-0 mt-0.5" />}
+                      <div>
+                        <p className="font-bold">{rolloverResult.msg}</p>
+                        {rolloverResult.ok && (
+                          <p className="text-xs mt-1 opacity-80">
+                            {rolloverResult.created} registro{rolloverResult.created !== 1 ? 's' : ''} de trayectoria creado{rolloverResult.created !== 1 ? 's' : ''}
+                            {rolloverResult.skipped > 0 && ` · ${rolloverResult.skipped} jugador${rolloverResult.skipped !== 1 ? 'es' : ''} ya tenía entrada para esa temporada (omitido${rolloverResult.skipped !== 1 ? 's' : ''})`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botón / Confirmación */}
+                  {!rolloverConfirm ? (
+                    <button
+                      onClick={() => { setRolloverConfirm(true); setRolloverResult(null); }}
+                      className="flex items-center gap-2 py-3 px-6 bg-amber-500/10 text-amber-400 border border-amber-500/20 font-black rounded-xl hover:bg-amber-500/20 transition-all text-sm uppercase tracking-widest active:scale-95"
+                    >
+                      <Calendar size={16} />
+                      CERRAR TEMPORADA {season}
+                    </button>
+                  ) : (
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-amber-300">¿Confirmar cierre de temporada {season}?</p>
+                          <p className="text-xs text-amber-400/70 leading-relaxed">
+                            Se creará un registro de trayectoria (sin estadísticas) para cada jugador sin entrada en <strong>{season}</strong>.
+                            La temporada activa del club pasará a <strong>{advanceSeason(season)}</strong>.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setRolloverConfirm(false)}
+                          disabled={rolloverLoading}
+                          className="px-4 py-2 text-xs font-black text-slate-400 hover:text-white transition-colors uppercase tracking-widest disabled:opacity-40"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleSeasonRollover}
+                          disabled={rolloverLoading}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-amber-600 text-slate-900 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-amber-500 disabled:opacity-50 transition-all active:scale-95"
+                        >
+                          {rolloverLoading
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Calendar size={14} />}
+                          {rolloverLoading ? 'Procesando...' : 'CONFIRMAR CIERRE'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

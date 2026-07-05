@@ -98,23 +98,26 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
         {/* Posiciones */}
         <div className="bg-slate-950/40 border border-slate-800/50 p-6 rounded-[2.5rem] hover:border-emerald-500/10 transition-all group backdrop-blur-md">
-          <div className="flex flex-col items-center text-center gap-4">
-            <div className="w-24 h-24 flex-shrink-0">
+          <div className="flex flex-col items-center text-center gap-5">
+            <div className="flex items-center justify-center gap-3">
+              <div className="h-6 w-1.5 rounded-full bg-emerald-400" />
+              <h3 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">POSICIONES</h3>
+            </div>
+            <div className="w-36 h-36 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={positionDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
+                  <Pie data={positionDistribution} innerRadius={38} outerRadius={60} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {positionDistribution.map((entry, index) => <Cell key={`cell-p-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="w-full">
-              <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Posiciones</p>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col items-center gap-2">
                 {positionDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex items-center justify-center gap-2 text-center">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[10px] font-black text-slate-200 shrink-0">{item.value}</span>
                     <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
@@ -125,23 +128,26 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
 
         {/* Categorías */}
         <div className="bg-slate-950/40 border border-slate-800/50 p-6 rounded-[2.5rem] hover:border-emerald-500/10 transition-all group backdrop-blur-md">
-          <div className="flex flex-col items-center text-center gap-4">
-            <div className="w-24 h-24 flex-shrink-0">
+          <div className="flex flex-col items-center text-center gap-5">
+            <div className="flex items-center justify-center gap-3">
+              <div className="h-6 w-1.5 rounded-full bg-fuchsia-400" />
+              <h3 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">CATEGORIAS</h3>
+            </div>
+            <div className="w-36 h-36 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={categoryDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
+                  <Pie data={categoryDistribution} innerRadius={38} outerRadius={60} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {categoryDistribution.map((entry, index) => <Cell key={`cell-c-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="w-full">
-              <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Niveles</p>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col items-center gap-2">
                 {categoryDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex items-center justify-center gap-2 text-center">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[10px] font-black text-slate-200 shrink-0">{item.value}</span>
                     <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
@@ -152,23 +158,26 @@ const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
 
         {/* Estados */}
         <div className="bg-slate-950/40 border border-slate-800/50 p-6 rounded-[2.5rem] hover:border-emerald-500/10 transition-all group backdrop-blur-md">
-          <div className="flex flex-col items-center text-center gap-4">
-            <div className="w-24 h-24 flex-shrink-0">
+          <div className="flex flex-col items-center text-center gap-5">
+            <div className="flex items-center justify-center gap-3">
+              <div className="h-6 w-1.5 rounded-full bg-cyan-400" />
+              <h3 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">ESTADO</h3>
+            </div>
+            <div className="w-36 h-36 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
-                  <Pie data={statusDistribution} innerRadius={26} outerRadius={41} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
+                  <Pie data={statusDistribution} innerRadius={38} outerRadius={60} paddingAngle={6} dataKey="value" stroke="none" cornerRadius={0}>
                     {statusDistribution.map((entry, index) => <Cell key={`cell-s-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="w-full">
-              <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 italic">Estatus</p>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col items-center gap-2">
                 {statusDistribution.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex items-center justify-center gap-2 text-center">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-[10px] font-black text-slate-200 w-5 text-right shrink-0">{item.value}</span>
+                    <span className="text-[10px] font-black text-slate-200 shrink-0">{item.value}</span>
                     <span className="text-[9px] font-bold text-slate-500 uppercase">{item.name}</span>
                   </div>
                 ))}
@@ -283,9 +292,9 @@ export const Dashboard = memo(function Dashboard({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
             onClick={stat.onClick}
-            className="bg-slate-900/40 border border-slate-800/80 p-4 md:p-5 rounded-3xl cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col justify-between h-32 md:h-48"
+            className="bg-slate-900/40 border border-slate-800/80 p-4 md:p-5 rounded-3xl cursor-pointer hover:border-white/10 transition-all group active:scale-95 shadow-lg flex flex-col items-center justify-center gap-3 text-center"
           >
-            <div className={cn("w-9 h-9 md:w-10 md:h-10 rounded-xl mb-3 md:mb-4 flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
+            <div className={cn("w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110", stat.bgColor)}>
               <stat.icon size={18} className={stat.color} />
             </div>
             <div>

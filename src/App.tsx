@@ -32,49 +32,32 @@ const isValidUUID = (str: string) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 };
 
-const serializeHistoryValue = (value: unknown) => {
-  if (value === undefined || value === null || value === '') return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+const getReportDay = (value?: string | null) => (value || '').split('T')[0];
+
+const hasTextValue = (value?: string | null) => Boolean(value && value.trim());
+
+const getReportTimestamp = (report: Report) => new Date(report.report_date || report.created_at || 0).getTime();
+
+const isMinimalReport = (report: Report) => {
+  const secondaryTexts = [
+    report.tactical_comment,
+    report.physical_comment,
+    report.mental_comment,
+    report.key_actions,
+    report.doubts,
+    report.next_step,
+    report.match_context,
+    report.position_played,
+    report.observer_role,
+  ];
+  const hasSecondaryContent = secondaryTexts.some(hasTextValue);
+  const hasCollections = (report.strengths?.length || 0) > 0
+    || (report.weaknesses?.length || 0) > 0
+    || (report.custom_ratings?.length || 0) > 0;
+  const hasRatings = Object.entries(report).some(([key, value]) => key.startsWith('rating_') && Number(value) > 0);
+
+  return !report.match_id && !hasSecondaryContent && !hasCollections && !hasRatings;
 };
-
-const areValuesEqual = (left: unknown, right: unknown) =>
-  serializeHistoryValue(left) === serializeHistoryValue(right);
-
-const TRACKED_PLAYER_FIELDS: Array<keyof Player> = [
-  'global_rating',
-  'potential_rating',
-  'rating_technical',
-  'rating_tactical',
-  'rating_physical',
-  'rating_mental',
-  'rating_competitive',
-  'rating_decision_making',
-  'rating_pace',
-  'rating_intelligence',
-  'rating_personality',
-  'rating_potential',
-  'rating_club_fit',
-  'technical_profile',
-  'tactical_profile',
-  'physical_profile',
-  'mental_profile',
-  'differential_talent',
-  'risks_analysis',
-  'improvement_margin',
-  'player_type',
-  'ideal_role',
-  'current_level_club',
-  'future_level_estimated',
-  'comparison_players',
-  'general_observations',
-  'verification_status',
-  'avatar_url',
-];
 
 export default function App() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -82,7 +65,6 @@ export default function App() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
-  const [history, setHistory] = useState<HistoryLog[]>([]);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -102,6 +84,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
 
   const userRole = (userProfile?.role ?? 'SCOUT') as UserRole;
   const userId = userProfile?.user_id ?? '';
@@ -140,9 +123,13 @@ export default function App() {
     setMatches([]);
     setReports([]);
     setVideos([]);
-    setHistory([]);
     setActiveTab('dashboard');
   };
+
+  // Clubes/equipos ya utilizados por jugadores, para desplegables de selección
+  const allClubNames = useMemo(() => (
+    Array.from(new Set(players.map(p => p.club_name).filter(Boolean))).sort() as string[]
+  ), [players]);
 
   // Jugadores filtrados según rol
   const scopedPlayers = useMemo(() => {
@@ -181,6 +168,26 @@ export default function App() {
     return reports;
   }, [reports, players, userRole, userProfile?.category_id]);
 
+  const findReusableReport = (incoming: { player_id: string; match_id?: string; report_date?: string }) => {
+    const samePlayerReports = reports
+      .filter(report => report.player_id === incoming.player_id)
+      .sort((a, b) => getReportTimestamp(b) - getReportTimestamp(a));
+
+    if (incoming.match_id) {
+      const exactMatch = samePlayerReports.find(report => report.match_id === incoming.match_id);
+      if (exactMatch) return exactMatch;
+    }
+
+    const incomingDay = getReportDay(incoming.report_date || new Date().toISOString());
+    const sameDayReports = samePlayerReports.filter(report => getReportDay(report.report_date || report.created_at) === incomingDay);
+
+    if (sameDayReports.length === 1) {
+      return sameDayReports[0];
+    }
+
+    return sameDayReports.find(report => isMinimalReport(report) || !report.match_id || !incoming.match_id) || null;
+  };
+
   const bootstrapAndFetch = async () => {
     setLoading(true);
     try {
@@ -198,7 +205,10 @@ export default function App() {
       const { error: healthError } = await supabase.from('players').select('id').limit(1);
       if (healthError) {
         console.error('Table access error:', healthError);
+        setDbConnected(false);
         alert('ADVERTENCIA: No se puede acceder a la tabla "players" en Supabase. Asegúrate de haber ejecutado el script SQL en el editor de Supabase.');
+      } else {
+        setDbConnected(true);
       }
 
       // 1. Ensure a club exists (upsert prevents duplicates even with StrictMode double-invoke)
@@ -372,31 +382,41 @@ export default function App() {
       else delete cleaned.current_team_id;
     }
 
+    // created_by es UUID: cadena vacía o valor no-UUID debe ir como null
+    if (cleaned.created_by !== undefined && !isValidUUID(cleaned.created_by)) {
+      cleaned.created_by = null;
+    }
+
     return cleaned;
   };
 
-  const buildPlayerHistoryEntries = (previousPlayer: Player, nextPlayer: Player): Omit<HistoryLog, 'id' | 'created_at'>[] =>
-    TRACKED_PLAYER_FIELDS
-      .filter((field) => !areValuesEqual(previousPlayer[field], nextPlayer[field]))
-      .map((field) => ({
-        player_id: nextPlayer.id,
-        user_id: isValidUUID(nextPlayer.created_by || '') ? nextPlayer.created_by : isValidUUID(previousPlayer.created_by || '') ? previousPlayer.created_by : null,
-        field: String(field),
-        old_value: serializeHistoryValue(previousPlayer[field]),
-        new_value: serializeHistoryValue(nextPlayer[field]),
-      }));
+  const buildPlayerHistoryFromTimestamps = (player: Player): HistoryLog[] => {
+    const entries: HistoryLog[] = [];
+    if (player.created_at) {
+      entries.push({
+        id: `${player.id}-created`,
+        player_id: player.id,
+        user_id: isValidUUID(player.created_by || '') ? player.created_by : null,
+        field: 'registro creado',
+        old_value: null,
+        new_value: null,
+        created_at: player.created_at,
+      });
+    }
 
-  const persistHistoryEntries = async (entries: Omit<HistoryLog, 'id' | 'created_at'>[]) => {
-    if (!entries.length) return;
+    if (player.updated_at && player.updated_at !== player.created_at) {
+      entries.unshift({
+        id: `${player.id}-updated`,
+        player_id: player.id,
+        user_id: isValidUUID(player.created_by || '') ? player.created_by : null,
+        field: 'última edición',
+        old_value: null,
+        new_value: null,
+        created_at: player.updated_at,
+      });
+    }
 
-    const optimisticEntries: HistoryLog[] = entries.map((entry, index) => ({
-      id: `history-${Date.now()}-${index}`,
-      created_at: new Date().toISOString(),
-      ...entry,
-    }));
-    setHistory((prev) => [...optimisticEntries, ...prev]);
-
-    // history_logs table not yet created in Supabase — kept in local state only
+    return entries;
   };
 
   // Helper to clean report data for Supabase
@@ -407,7 +427,7 @@ export default function App() {
       'tactical_comment', 'physical_comment', 'mental_comment', 'strengths', 
       'weaknesses', 'key_actions', 'doubts', 'recommendation', 'next_step', 
       'match_rating', 'rating_physical', 'rating_technical', 'rating_tactical', 
-      'rating_mental', 'custom_ratings', 'video_urls'
+      'rating_mental', 'custom_ratings', 'video_urls', 'observer_role'
     ];
 
     const cleaned: any = {};
@@ -454,9 +474,10 @@ export default function App() {
     if (editingPlayer) {
       const updatedPlayer = applyCurrentClubModel({
         ...editingPlayer, 
-        full_name: newPlayerData.name, 
+        full_name: newPlayerData.name,
         first_name: newPlayerData.name?.split(' ')[0] || '',
         last_name: newPlayerData.name?.split(' ').slice(1).join(' ') || '',
+        short_name: newPlayerData.name ? newPlayerData.name.toUpperCase() : editingPlayer.short_name,
         main_position: newPlayerData.position,
         birth_date: newPlayerData.birth_date || undefined,
         birth_year: Number(newPlayerData.birth_year),
@@ -635,9 +656,6 @@ export default function App() {
           console.error('Error updating player in Supabase:', error);
           alert('Error al actualizar en la base de datos: ' + error.message);
         } else {
-          if (previousPlayer) {
-            await persistHistoryEntries(buildPlayerHistoryEntries(previousPlayer, normalizedPlayer));
-          }
            console.log('Player updated successfully in Supabase');
         }
       } else {
@@ -768,6 +786,14 @@ export default function App() {
           return r.player_id === data.player_id && !r.match_id && rDay === day;
         }) || null;
       }
+    }
+
+    if (!effectiveEditingReport && data.player_id) {
+      effectiveEditingReport = findReusableReport({
+        player_id: data.player_id,
+        match_id: data.match_id,
+        report_date: data.report_date,
+      });
     }
 
     // 1. Create or Update Report object
@@ -958,6 +984,83 @@ export default function App() {
     setEditingReport(null);
   };
 
+  // Nota de campo rápida desde la ficha del jugador: crea un informe mínimo
+  // (solo texto) que se suma al listado de "Notas de campo" sin pasar por el modal de informe.
+  const handleAddFieldNote = async (playerId: string, text: string, score?: number) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const now = new Date().toISOString();
+    const reusableReport = findReusableReport({
+      player_id: playerId,
+      report_date: now,
+    });
+    const nextTechnicalComment = reusableReport?.technical_comment
+      ? `${reusableReport.technical_comment}\n\n${trimmed}`
+      : trimmed;
+
+    const newNote = {
+      ...(reusableReport || {}),
+      id: reusableReport?.id || (window.crypto.randomUUID ? window.crypto.randomUUID() : `r-${Date.now()}`),
+      player_id: playerId,
+      report_date: reusableReport?.report_date || now,
+      minutes_observed: reusableReport?.minutes_observed || 90,
+      recommendation: reusableReport?.recommendation || 'TRACKING',
+      match_rating: score ?? reusableReport?.match_rating ?? 0,
+      technical_comment: nextTechnicalComment,
+      strengths: reusableReport?.strengths || [],
+      weaknesses: reusableReport?.weaknesses || [],
+      custom_ratings: reusableReport?.custom_ratings || [],
+      created_at: reusableReport?.created_at || now,
+    } as unknown as Report;
+
+    setReports(prev => reusableReport
+      ? prev.map(report => report.id === reusableReport.id ? newNote : report)
+      : [newNote, ...prev]);
+
+    try {
+      const cleaned = await prepareReportForDB(newNote);
+      const query = reusableReport && isValidUUID(reusableReport.id)
+        ? supabase.from('reports').update(cleaned).eq('id', reusableReport.id).select()
+        : supabase.from('reports').insert([cleaned]).select();
+      const { data, error } = await query;
+      if (error) {
+        console.error('Error saving field note:', error);
+        alert('Error al guardar la nota de campo: ' + error.message);
+      } else if (data && data[0]) {
+        setReports(prev => reusableReport
+          ? prev.map(report => report.id === reusableReport.id ? data[0] as Report : report)
+          : [data[0] as Report, ...prev.filter(r => r.id !== newNote.id)]);
+      }
+    } catch (err) {
+      console.error('Error saving field note:', err);
+    }
+  };
+
+  // Editar/corregir el texto y el score de una nota de campo ya guardada
+  const handleUpdateFieldNote = async (reportId: string, text: string, score?: number) => {
+    const trimmed = text.trim();
+    setReports(prev => prev.map(r => r.id === reportId ? { ...r, technical_comment: trimmed, match_rating: score ?? r.match_rating } : r));
+
+    if (!isValidUUID(reportId)) return;
+    const { error } = await supabase.from('reports').update({ technical_comment: trimmed, match_rating: score }).eq('id', reportId);
+    if (error) {
+      console.error('Error updating field note:', error);
+      alert('Error al actualizar la nota de campo: ' + error.message);
+    }
+  };
+
+  // Borrar una nota de campo
+  const handleDeleteFieldNote = async (reportId: string) => {
+    setReports(prev => prev.filter(r => r.id !== reportId));
+    if (!isValidUUID(reportId)) return;
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (error) {
+      console.error('Error deleting field note:', error);
+      alert('Error al borrar la nota de campo: ' + error.message);
+    }
+  };
+
   const detectVideoPlatform = (url: string): string => {
     if (/youtube\.com|youtu\.be/.test(url)) return 'YOUTUBE';
     if (/vimeo\.com/.test(url)) return 'VIMEO';
@@ -1003,9 +1106,9 @@ export default function App() {
       reports: reports.filter(r => r.player_id === selectedPlayer.id),
       matches: matches.filter(m => (m.observed_players_ids || []).includes(selectedPlayer.id)),
       videos: videos.filter(v => v.player_id === selectedPlayer.id),
-      history: history.filter(h => h.player_id === selectedPlayer.id)
+      history: buildPlayerHistoryFromTimestamps(players.find(p => p.id === selectedPlayer.id) || selectedPlayer)
     };
-  }, [selectedPlayer, players, reports, matches, videos, history]);
+  }, [selectedPlayer, players, reports, matches, videos]);
 
   const matchDetailProps = useMemo(() => {
     if (!selectedMatch) return null;
@@ -1039,6 +1142,9 @@ export default function App() {
         onAddVideo={(v) => handleAddVideo({ ...v, player_id: selectedPlayer.id })}
         onDeleteVideo={handleDeleteVideo}
         onUpdatePlayer={handleUpdatePlayer}
+        onAddFieldNote={(text, score) => handleAddFieldNote(selectedPlayer.id, text, score)}
+        onUpdateFieldNote={handleUpdateFieldNote}
+        onDeleteFieldNote={handleDeleteFieldNote}
       />;
     }
 
@@ -1215,9 +1321,17 @@ export default function App() {
                </div>
             </div>
             {/* Centro: seguimiento activo */}
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-widest hidden sm:flex">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Seguimiento Activo
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest hidden sm:flex"
+              title={dbConnected === null ? 'Conectando...' : dbConnected ? 'Supabase conectado' : 'Sin conexión a base de datos'}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                dbConnected === null ? 'bg-amber-400 animate-pulse' :
+                dbConnected ? 'bg-emerald-500 animate-pulse' :
+                'bg-rose-500'
+              }`} />
+              <span className={dbConnected === false ? 'text-rose-400' : dbConnected === null ? 'text-amber-400' : 'text-slate-500'}>
+                {dbConnected === null ? 'Conectando...' : dbConnected ? 'Seguimiento Activo' : 'Sin Conexión'}
+              </span>
             </div>
             {/* Derecha: avatar */}
             <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-slate-100 italic cursor-pointer hover:border-emerald-500/50 transition-all shadow-inner">
@@ -1250,6 +1364,7 @@ export default function App() {
         initialData={editingPlayer}
         matches={matches}
         currentMatchId={selectedMatch?.id}
+        clubs={allClubNames}
       />
 
       <LinkPlayerModal
@@ -1264,7 +1379,7 @@ export default function App() {
         isOpen={isNewMatchOpen}
         onClose={() => setIsNewMatchOpen(false)}
         onSave={handleSaveMatch}
-        clubs={Array.from(new Set(players.map(p => p.club_name).filter(Boolean))).sort() as string[]}
+        clubs={allClubNames}
       />
     </div>
   );

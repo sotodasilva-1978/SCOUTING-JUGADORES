@@ -25,10 +25,14 @@ interface QuickAddModalProps {
   initialData?: any;
   matches?: Match[];
   currentMatchId?: string;
+  clubs?: string[];
 }
 
-export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = [], currentMatchId }: QuickAddModalProps) {
+const NEW_CLUB_VALUE = '__NEW_CLUB__';
+
+export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = [], currentMatchId, clubs = [] }: QuickAddModalProps) {
   const [addMode, setAddMode] = useState<'quick' | 'complete'>('quick');
+  const [isNewClub, setIsNewClub] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -91,6 +95,7 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
         differential_talent: initialData.differential_talent || '',
         risk_level: initialData.risk_level || 'LOW'
       }));
+      setIsNewClub(!!initialData.club_name && !clubs.includes(initialData.club_name));
     } else {
       setFormData(prev => ({
         ...prev,
@@ -109,6 +114,7 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
         videoUrl: '',
         avatarUrl: ''
       }));
+      setIsNewClub(false);
     }
   }, [initialData, isOpen, currentMatchId]);
 
@@ -180,12 +186,48 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
 
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Equipo Actual</label>
-                  <input
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-emerald-500/50"
-                    value={formData.team}
-                    onChange={(e) => setFormData({...formData, team: e.target.value})}
-                  />
+                  {isNewClub ? (
+                    <div className="flex gap-2">
+                      <input
+                        required
+                        autoFocus
+                        placeholder="Nombre del club/equipo nuevo..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-emerald-500/50"
+                        value={formData.team}
+                        onChange={(e) => setFormData({...formData, team: e.target.value})}
+                      />
+                      {clubs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setIsNewClub(false); setFormData({...formData, team: ''}); }}
+                          className="shrink-0 px-3 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all"
+                          title="Elegir de la lista"
+                        >
+                          LISTA
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none appearance-none focus:border-emerald-500/50"
+                      value={formData.team}
+                      onChange={(e) => {
+                        if (e.target.value === NEW_CLUB_VALUE) {
+                          setIsNewClub(true);
+                          setFormData({...formData, team: ''});
+                        } else {
+                          setFormData({...formData, team: e.target.value});
+                        }
+                      }}
+                    >
+                      <option value="">Seleccionar club/equipo...</option>
+                      {clubs.map(club => (
+                        <option key={club} value={club}>{club}</option>
+                      ))}
+                      <option value={NEW_CLUB_VALUE}>+ Club/Equipo nuevo...</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>
