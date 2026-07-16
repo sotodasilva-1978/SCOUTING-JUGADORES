@@ -1371,9 +1371,21 @@ export default function App() {
           <div className="h-16 flex items-center justify-between px-4 md:px-8 lg:px-10 shrink-0">
             {/* Izquierda: breadcrumb */}
             <div className="flex items-center gap-4">
-               <div className="flex items-center gap-2.5 lg:hidden">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-slate-950 italic shadow-lg shadow-emerald-500/20">U</div>
-                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-100 italic leading-none">U.D. Santa Mariña</h2>
+               <div className="flex items-center gap-2.5 lg:hidden min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-black text-slate-950 italic shadow-lg shadow-emerald-500/20 shrink-0">U</div>
+                  {userRole === 'SUPERADMIN' && allClients && allClients.length > 0 ? (
+                    <select
+                      value={effectiveClubId ?? ''}
+                      onChange={(e) => setViewAsClubId(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] font-black text-slate-200 outline-none focus:border-emerald-500/60 min-w-0 max-w-[160px] truncate"
+                    >
+                      {allClients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <h2 className="text-xs font-black uppercase tracking-widest text-slate-100 italic leading-none">U.D. Santa Mariña</h2>
+                  )}
                </div>
                <div className="hidden lg:flex items-center gap-3">
                   <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[9px] font-black text-slate-500 uppercase tracking-widest">Sistema</div>
