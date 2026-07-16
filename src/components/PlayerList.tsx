@@ -1,6 +1,6 @@
 import { Search, Filter, Plus, Eye, FileText, Trash2, ChevronLeft, ChevronRight, User, X, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, sortCategories, sortPositions, POSITION_ORDER } from '../lib/utils';
+import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, sortCategories, sortPositions, POSITION_ORDER, getSportName } from '../lib/utils';
 import { memo, useMemo, useState, ReactNode } from 'react';
 import { Player } from '../types';
 
@@ -350,7 +350,8 @@ export const PlayerList = memo(function PlayerList({
                          {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%]" /> : <User className="w-6 h-6 opacity-40" />}
                        </div>
                        <div>
-                         <p className="font-black text-slate-100 group-hover:text-emerald-400 transition-colors tracking-tight">{player.full_name}</p>
+                         <p className="font-black text-slate-100 group-hover:text-emerald-400 transition-colors tracking-tight">{getSportName(player.first_name, player.last_name, player.short_name)}</p>
+                         <p className="text-xs font-light text-slate-500 italic">{player.full_name}</p>
                        </div>
                     </div>
                   </td>
@@ -434,7 +435,8 @@ export const PlayerList = memo(function PlayerList({
                       {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%] rounded-2xl" /> : <User className="w-8 h-8 opacity-20" />}
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors truncate max-w-[160px] sm:max-w-none">{player.full_name}</h4>
+                      <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors truncate max-w-[160px] sm:max-w-none">{getSportName(player.first_name, player.last_name, player.short_name)}</h4>
+                      <p className="text-xs font-light text-slate-500 italic truncate max-w-[160px] sm:max-w-none">{player.full_name}</p>
                       <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1 truncate max-w-[160px] sm:max-w-none">
                         {player.main_position} · {calculateCategory(player.birth_year, player.birth_date)} · {player.birth_year || 'N/R'} ({player.calculated_age}A)
                       </p>

@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
-import { Crosshair, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { signIn } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
@@ -49,11 +49,17 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-2xl shadow-emerald-500/30 flex items-center justify-center mb-4">
-            <Crosshair className="text-slate-950" size={32} strokeWidth={2.5} />
-          </div>
-          <h1 className="font-black text-2xl text-white italic tracking-tighter uppercase">U.D. Santa Mariña</h1>
-          <span className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em] mt-1">AS Pro Scout</span>
+          <img
+            src="/logo-as-pro-scout.png"
+            alt="AS Pro Scout"
+            className="w-56 h-56 object-contain"
+            style={{
+              maskImage: 'radial-gradient(circle, black 50%, transparent 72%)',
+              WebkitMaskImage: 'radial-gradient(circle, black 50%, transparent 72%)',
+            }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <h1 className="relative z-10 -mt-16 font-black text-4xl text-white italic tracking-tighter uppercase drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">AS Pro Scout</h1>
         </div>
 
         {!showReset ? (

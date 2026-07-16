@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { PlayerList } from './components/PlayerList';
@@ -13,10 +14,11 @@ import { LinkPlayerModal } from './components/LinkPlayerModal';
 import { ReportList } from './components/ReportList';
 import { ReportForm } from './components/ReportForm';
 import { SettingsPanel } from './components/SettingsPanel';
+import { PlatformAdmin } from './components/PlatformAdmin';
 import { Comparativas } from './components/Comparativas';
 import { LoginPage } from './components/LoginPage';
 import { Plus, Loader2 } from 'lucide-react';
-import { Player, Match, Report, Video, HistoryLog, Profile, UserRole } from './types';
+import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
 import { computeAge, calculateCategory, isF11Category, isF8Category, canCreateReport, canPrintReport } from './lib/utils';
 import {
@@ -82,6 +84,8 @@ export default function App() {
 
   // Auth state
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
@@ -89,12 +93,18 @@ export default function App() {
   const userRole = (userProfile?.role ?? 'SCOUT') as UserRole;
   const userId = userProfile?.user_id ?? '';
 
+  // El SUPERADMIN puede "ver como" cualquier club desde el selector del sidebar.
+  // El resto de roles siempre ven el club de su propio perfil.
+  const [viewAsClubId, setViewAsClubId] = useState<string | null>(null);
+  const effectiveClubId = userRole === 'SUPERADMIN'
+    ? (viewAsClubId ?? userProfile?.club_id ?? null)
+    : (userProfile?.club_id ?? null);
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         const profile = await getOrCreateProfile(session.user.id, session.user.email!);
         setUserProfile(profile);
-        bootstrapAndFetch();
       } else {
         setAuthLoading(false);
         setLoading(false);
@@ -106,9 +116,9 @@ export default function App() {
         const profile = await getOrCreateProfile(session.user.id, session.user.email!);
         setUserProfile(profile);
         setAuthLoading(false);
-        if (event === 'SIGNED_IN') bootstrapAndFetch();
       } else {
         setUserProfile(null);
+        setViewAsClubId(null);
         setAuthLoading(false);
         setLoading(false);
       }
@@ -117,12 +127,37 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!userProfile || !effectiveClubId) return;
+    bootstrapAndFetch(effectiveClubId);
+  }, [userProfile?.user_id, effectiveClubId]);
+
+  useEffect(() => {
+    if (!effectiveClubId) { setClient(null); return; }
+    supabase
+      .from('clients')
+      .select('*')
+      .eq('id', effectiveClubId)
+      .maybeSingle()
+      .then(({ data }) => setClient(data as Client | null));
+  }, [effectiveClubId]);
+
+  useEffect(() => {
+    if (userRole !== 'SUPERADMIN') { setAllClients([]); return; }
+    supabase
+      .from('clients')
+      .select('*')
+      .order('name', { ascending: true })
+      .then(({ data }) => setAllClients((data as Client[]) || []));
+  }, [userRole]);
+
   const handleLogout = async () => {
     await signOut();
     setPlayers([]);
     setMatches([]);
     setReports([]);
     setVideos([]);
+    setViewAsClubId(null);
     setActiveTab('dashboard');
   };
 
@@ -188,7 +223,7 @@ export default function App() {
     return sameDayReports.find(report => isMinimalReport(report) || !report.match_id || !incoming.match_id) || null;
   };
 
-  const bootstrapAndFetch = async () => {
+  const bootstrapAndFetch = async (forClubId?: string | null) => {
     setLoading(true);
     try {
       // Check if Supabase is configured
@@ -242,36 +277,45 @@ export default function App() {
         if (newTeam) teamId = newTeam.id;
       }
 
-      // 3. Fetch Players
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 3. Fetch Players (para SUPERADMIN, siempre filtrado por el club que está viendo)
+      let playersQuery = supabase.from('players').select('*').order('created_at', { ascending: false });
+      if (forClubId) playersQuery = playersQuery.eq('owner_club_id', forClubId);
+      const { data: playersData, error: playersError } = await playersQuery;
 
       if (playersError) {
         console.error('Fetch players error:', playersError);
         throw playersError;
       }
-      
+
       console.log('Fetched players count:', playersData?.length || 0);
-      
+
       if (playersData) {
         // Recalcular siempre la edad en cliente para no depender del valor guardado en BD
         setPlayers((playersData as Player[]).map(p => ({
           ...applyClubModelToPlayer(p, resolvedClubModelWeights),
           calculated_age: computeAge(p.birth_date, p.birth_year),
         })));
+      } else {
+        setPlayers([]);
       }
 
-      // 4. Fetch other data
-      const { data: matchesData } = await supabase.from('matches').select('*');
-      if (matchesData && matchesData.length > 0) setMatches(matchesData as Match[]);
+      const playerIds = (playersData || []).map((p: Player) => p.id);
 
-      const { data: reportsData } = await supabase.from('reports').select('*');
-      if (reportsData && reportsData.length > 0) setReports(reportsData as Report[]);
+      // 4. Fetch other data (misma lógica: acotado al club que se está viendo)
+      let matchesQuery = supabase.from('matches').select('*');
+      if (forClubId) matchesQuery = matchesQuery.eq('owner_club_id', forClubId);
+      const { data: matchesData } = await matchesQuery;
+      setMatches(matchesData && matchesData.length > 0 ? (matchesData as Match[]) : []);
 
-      const { data: videosData } = await supabase.from('videos').select('*').order('created_at', { ascending: false });
-      if (videosData && videosData.length > 0) setVideos(videosData as Video[]);
+      let reportsQuery = supabase.from('reports').select('*');
+      if (forClubId) reportsQuery = reportsQuery.in('player_id', playerIds.length > 0 ? playerIds : ['00000000-0000-0000-0000-000000000000']);
+      const { data: reportsData } = await reportsQuery;
+      setReports(reportsData && reportsData.length > 0 ? (reportsData as Report[]) : []);
+
+      let videosQuery = supabase.from('videos').select('*').order('created_at', { ascending: false });
+      if (forClubId) videosQuery = videosQuery.in('player_id', playerIds.length > 0 ? playerIds : ['00000000-0000-0000-0000-000000000000']);
+      const { data: videosData } = await videosQuery;
+      setVideos(videosData && videosData.length > 0 ? (videosData as Video[]) : []);
 
 
     } catch (err) {
@@ -1210,6 +1254,7 @@ export default function App() {
           matches={matches}
           reports={scopedReports}
           videos={videos}
+          client={client}
         />;
       case 'players':
         return <PlayerList
@@ -1259,9 +1304,14 @@ export default function App() {
       case 'users':
         return <SettingsPanel
           userRole={userRole}
+          client={client}
           initialWeights={clubModelWeights}
           onWeightsSaved={handleClubModelWeightsSaved}
         />;
+      case 'platform':
+        return userRole === 'SUPERADMIN' ? (
+          <PlatformAdmin onViewClub={(id) => { setViewAsClubId(id); setActiveTab('settings'); }} />
+        ) : null;
       default:
         return <Dashboard
           onSelectPlayer={handleSelectPlayer}
@@ -1276,6 +1326,7 @@ export default function App() {
           matches={matches}
           reports={scopedReports}
           videos={videos}
+          client={client}
         />;
     }
   };
@@ -1292,8 +1343,14 @@ export default function App() {
     return <LoginPage />;
   }
 
+  const clubCssVars = {
+    '--club-primary': client?.primary_color || '#10b981',
+    '--club-secondary': client?.secondary_color || '#0f172a',
+    '--club-tertiary': client?.tertiary_color || '#f59e0b',
+  } as CSSProperties;
+
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-200 selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-slate-950 flex text-slate-200 selection:bg-emerald-500/30" style={clubCssVars}>
       <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab) => {
@@ -1302,6 +1359,10 @@ export default function App() {
         }}
         role={userRole}
         userProfile={userProfile}
+        client={client}
+        allClients={allClients}
+        viewAsClubId={effectiveClubId}
+        onChangeViewAsClub={setViewAsClubId}
         onLogout={handleLogout}
       />
       

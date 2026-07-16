@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'ADMIN' | 'COORD' | 'COORD_F11' | 'COORD_F8' | 'PRESID' | 'ENTREN' | 'SCOUT' | 'SCOUT_F11' | 'SCOUT_F8';
+export type UserRole = 'ADMIN' | 'COORD' | 'COORD_F11' | 'COORD_F8' | 'PRESID' | 'ENTREN' | 'SCOUT' | 'SCOUT_F11' | 'SCOUT_F8' | 'SUPERADMIN';
 
 export interface Profile {
   id: string;
@@ -18,6 +18,8 @@ export interface Profile {
   updated_at: string;
 }
 
+// Catálogo de clubes REALES (a los que pertenecen los jugadores observados).
+// NO son clientes de la plataforma — ver `Client` para eso.
 export interface Club {
   id: string;
   ref_code?: string;
@@ -28,6 +30,35 @@ export interface Club {
   location?: string;
   created_at: string;
   updated_at: string;
+}
+
+// Registro de un pago mensual dentro del ciclo anual de suscripción.
+export interface PaymentEntry {
+  paid: boolean;        // ¿Pagado este mes?
+  paid_date?: string | null; // Fecha real en que se registró el pago (YYYY-MM-DD)
+}
+
+// Un club-cliente que paga la suscripción a la plataforma (tabla "clients").
+// Totalmente independiente del catálogo de clubes reales (`Club`).
+export interface Client {
+  id: string;
+  name: string;
+  current_season: string;
+  logo_url?: string | null;
+  background_image_url?: string | null;
+  primary_color?: string | null;
+  secondary_color?: string | null;
+  tertiary_color?: string | null;
+  location?: string | null;
+  subscription_status?: 'trial' | 'active' | 'expired';
+  subscription_start_date?: string | null;
+  subscription_end_date?: string | null;
+  monthly_fee?: number | null;
+  // Registro manual de pagos: 12 meses desde la fecha de activación.
+  // Cada posición es un mes (índice 0 = mes de activación).
+  payment_log?: PaymentEntry[] | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Category {
@@ -107,6 +138,7 @@ export interface Player {
   ref_code?: string;
   ref_seq?: number;
   club_id: string;
+  owner_club_id?: string | null;
   first_name: string;
   last_name?: string;
   full_name: string;
@@ -143,7 +175,7 @@ export interface Player {
   main_strength?: string;
   main_doubt?: string;
   differential_talent?: string;
-  short_name?: string;
+  short_name?: string; // Nombre deportivo - si está vacío, se usa first_name + primer apellido
   competition?: string;
   lateralidad?: string;
   trajectory?: TrajectoryEntry[];

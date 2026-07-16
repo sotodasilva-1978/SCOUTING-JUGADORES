@@ -1,8 +1,8 @@
 import React from 'react';
-import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair, Building2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn, getRoleLabel } from '../lib/utils';
-import type { Profile } from '../types';
+import type { Profile, Client } from '../types';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -19,16 +19,16 @@ function NavItem({ icon: Icon, label, isActive, onClick, collapsed }: NavItemPro
       className={cn(
         "flex items-center w-full px-3 py-3 my-1 transition-all duration-300 rounded-xl group relative overflow-hidden",
         isActive
-          ? "bg-emerald-500/10 text-emerald-500"
+          ? "bg-[var(--club-primary,#10b981)]/10 text-[var(--club-primary,#10b981)]"
           : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
       )}
     >
       {isActive && (
-        <motion.div layoutId="active-rail" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-emerald-500" />
+        <motion.div layoutId="active-rail" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-[var(--club-primary,#10b981)]" />
       )}
-      <Icon className={cn("w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110", isActive ? "text-emerald-500" : "text-slate-600 group-hover:text-slate-400")} />
+      <Icon className={cn("w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110", isActive ? "text-[var(--club-primary,#10b981)]" : "text-slate-600 group-hover:text-slate-400")} />
       {!collapsed && (
-        <span className={cn("ml-4 text-xs font-black uppercase tracking-widest transition-colors", isActive ? "text-emerald-500" : "group-hover:text-slate-200")}>
+        <span className={cn("ml-4 text-xs font-black uppercase tracking-widest transition-colors", isActive ? "text-[var(--club-primary,#10b981)]" : "group-hover:text-slate-200")}>
           {label}
         </span>
       )}
@@ -41,21 +41,26 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   role: string;
   userProfile: Profile | null;
+  client?: Client | null;
+  allClients?: Client[];
+  viewAsClubId?: string | null;
+  onChangeViewAsClub?: (clubId: string) => void;
   onLogout: () => void;
 }
 
-function BrandMark({ size = 44 }: { size?: number }) {
+function BrandMark({ size = 44, logoUrl }: { size?: number; logoUrl?: string | null }) {
   return (
     <img
-      src="/icon-master.png"
-      alt="AS PRO SCOUT"
+      src={logoUrl || '/icon-master.png'}
+      alt="Escudo del club"
       className="rounded-2xl shrink-0 object-cover shadow-lg shadow-slate-950/40"
       style={{ width: size, height: size }}
+      onError={(e) => { e.currentTarget.src = '/icon-master.png'; }}
     />
   );
 }
 
-export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, role, userProfile, onLogout }: SidebarProps) {
+export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, role, userProfile, client, allClients, viewAsClubId, onChangeViewAsClub, onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -65,8 +70,8 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
   const scrollLeft = React.useRef(0);
   const dragMoved = React.useRef(false);
 
-  const ALL_ROLES = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
-  const SCOUTS_AND_UP = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
+  const ALL_ROLES = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8', 'SUPERADMIN'];
+  const SCOUTS_AND_UP = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8', 'SUPERADMIN'];
 
   const navItems = [
     { id: 'dashboard',    label: 'Dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
@@ -74,8 +79,9 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
     { id: 'comparativas', label: 'Comparar',  icon: Crosshair,       roles: SCOUTS_AND_UP },
     { id: 'matches',      label: 'Agenda',    icon: Trophy,          roles: ALL_ROLES },
     { id: 'reports',      label: 'Archivo',   icon: ClipboardList,   roles: ALL_ROLES },
-    { id: 'teams',        label: 'Clubes',    icon: Shield,          roles: ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8'] },
-    { id: 'settings',     label: 'Config.',   icon: Settings,        roles: ['ADMIN'] },
+    { id: 'teams',        label: 'Clubes',    icon: Shield,          roles: ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'SUPERADMIN'] },
+    { id: 'settings',     label: 'Config.',   icon: Settings,        roles: ['ADMIN', 'SUPERADMIN'] },
+    { id: 'platform',     label: 'Plataforma', icon: Building2,      roles: ['SUPERADMIN'] },
   ];
 
   const filteredNav = navItems.filter(item => item.roles.includes(role));
@@ -125,14 +131,29 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
         className="hidden lg:flex flex-col h-screen sticky top-0 bg-slate-950/80 backdrop-blur-xl border-r border-slate-800/80 transition-all duration-300 z-40 overflow-hidden"
       >
         <div className={cn("px-5 pt-7 pb-5 flex items-center gap-3", isCollapsed && "justify-center px-0")}>
-          <BrandMark size={isCollapsed ? 46 : 54} />
+          <BrandMark size={isCollapsed ? 46 : 54} logoUrl={client?.logo_url} />
           {!isCollapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0">
-              <span className="font-black text-[15px] text-white italic tracking-tighter block leading-none uppercase truncate">U.D. Santa Mariña</span>
-              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.28em] block mt-1">AS Pro Scout</span>
+              <span className="font-black text-[15px] text-white italic tracking-tighter block leading-none uppercase truncate">{client?.name || 'AS Pro Scout'}</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.28em] block mt-1" style={{ color: 'var(--club-primary, #10b981)' }}>AS Pro Scout</span>
             </motion.div>
           )}
         </div>
+
+        {role === 'SUPERADMIN' && allClients && allClients.length > 0 && !isCollapsed && (
+          <div className="px-5 pb-4">
+            <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block mb-1">Ver como cliente</label>
+            <select
+              value={viewAsClubId ?? ''}
+              onChange={(e) => onChangeViewAsClub?.(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-2 text-[11px] font-bold text-slate-200 outline-none focus:border-emerald-500/60"
+            >
+              {allClients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <nav className="flex-1 px-4 mt-2 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'none' }}>
           <div className="space-y-1">

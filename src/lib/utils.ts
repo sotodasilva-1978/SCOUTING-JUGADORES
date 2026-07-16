@@ -179,36 +179,37 @@ export function isScoutRole(role: UserRole): boolean {
 }
 
 export function canCreatePlayer(role: UserRole): boolean {
-  return ['ADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
+  return ['ADMIN', 'SUPERADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
 }
 
 export function canEditPlayer(role: UserRole, createdBy: string, userId: string): boolean {
-  if (['ADMIN', 'COORD', 'ENTREN'].includes(role)) return true;
+  if (['ADMIN', 'SUPERADMIN', 'COORD', 'ENTREN'].includes(role)) return true;
   if (isScoutRole(role)) return createdBy === userId;
   return false;
 }
 
 export function canDeletePlayer(role: UserRole): boolean {
-  return role === 'ADMIN';
+  return role === 'ADMIN' || role === 'SUPERADMIN';
 }
 
 export function canCreateReport(role: UserRole): boolean {
-  return ['ADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
+  return ['ADMIN', 'SUPERADMIN', 'COORD', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role);
 }
 
 export function canEditReport(role: UserRole, observerId: string, userId: string): boolean {
-  if (['ADMIN', 'COORD'].includes(role)) return true;
+  if (['ADMIN', 'SUPERADMIN', 'COORD'].includes(role)) return true;
   if (['ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'].includes(role)) return observerId === userId;
   return false;
 }
 
 export function canPrintReport(role: UserRole): boolean {
-  return ['ADMIN', 'COORD', 'PRESID'].includes(role);
+  return ['ADMIN', 'SUPERADMIN', 'COORD', 'PRESID'].includes(role);
 }
 
 export function getRoleLabel(role: UserRole): string {
   const labels: Record<UserRole, string> = {
     ADMIN:     'Administrador',
+    SUPERADMIN:'Super Admin',
     COORD:     'Coordinador',
     COORD_F11: 'Coordinador F11',
     COORD_F8:  'Coordinador F8',
@@ -219,4 +220,17 @@ export function getRoleLabel(role: UserRole): string {
     SCOUT_F8:  'Scout F8',
   };
   return labels[role] || role;
+}
+
+/**
+ * Calcula el nombre deportivo del jugador.
+ * Si short_name está definido y no está vacío, lo usa.
+ * Si no, retorna first_name + primer apellido.
+ */
+export function getSportName(firstName: string, lastName?: string, shortName?: string): string {
+  if (shortName && shortName.trim()) {
+    return shortName.trim();
+  }
+  const lastNamePart = lastName ? lastName.split(' ')[0] : '';
+  return `${firstName} ${lastNamePart}`.trim();
 }

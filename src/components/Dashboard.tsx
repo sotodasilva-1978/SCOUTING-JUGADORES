@@ -4,7 +4,7 @@ import {
   Plus, ChevronRight, Star, Video, Calendar, ArrowUpRight, 
   Users, ClipboardList, Shield, Trophy, CheckCircle2, XCircle, Clock, MapPin, MousePointer2, User, FileText, Play
 } from 'lucide-react';
-import { Player, Match, Report, Video as VideoType } from '../types';
+import { Player, Match, Report, Video as VideoType, Client } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -20,6 +20,7 @@ interface DashboardProps {
   matches: Match[];
   reports: Report[];
   videos: VideoType[];
+  client?: Client | null;
 }
 
 const ScoutSummaryCard = memo(({ players }: { players: Player[] }) => {
@@ -198,7 +199,8 @@ export const Dashboard = memo(function Dashboard({
   players,
   matches,
   reports,
-  videos
+  videos,
+  client
 }: DashboardProps) {
 
   const stats = useMemo(() => [
@@ -256,19 +258,19 @@ export const Dashboard = memo(function Dashboard({
 
   return (
     <div className="space-y-10 animate-in fade-in duration-1000 pb-20">
-      <div className="relative flex flex-row items-center justify-between gap-4 px-6 py-6 mb-2 rounded-2xl overflow-hidden" style={{ minHeight: '140px', backgroundImage: 'url("https://xkjzgknmeqmpxoophcka.supabase.co/storage/v1/object/public/imagenes-ayuda/COTOGRANDE.jpg")', backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        <div className="absolute inset-0 bg-slate-950/50 rounded-2xl"></div>
+      <div className="relative flex flex-row items-center justify-between gap-4 px-6 py-6 mb-2 rounded-2xl overflow-hidden" style={{ minHeight: '140px', backgroundImage: `url("${client?.background_image_url || 'https://xkjzgknmeqmpxoophcka.supabase.co/storage/v1/object/public/imagenes-ayuda/COTOGRANDE.jpg'}")`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/40 rounded-2xl"></div>
         <motion.div
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
            className="min-w-0 relative z-10"
         >
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.25em] mb-3">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--club-primary,#10b981)]/20 border border-[var(--club-primary,#10b981)]/30 text-[var(--club-primary,#10b981)] text-[10px] font-black uppercase tracking-[0.25em] mb-3 backdrop-blur-sm">
             AS PRO SCOUT
           </span>
-          <h1 className="text-xl sm:text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight sm:tracking-tighter italic uppercase leading-tight">
-            U.D. SANTA MARIÑA
-            <span className="block text-emerald-500 text-xs sm:text-base md:text-2xl mt-1 sm:mt-2 md:mt-4 not-italic font-black tracking-[0.15em] sm:tracking-[0.25em] md:tracking-[0.3em] uppercase opacity-90">
+          <h1 className="text-xl sm:text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight sm:tracking-tighter italic uppercase leading-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.8)]">
+            {client?.name || 'U.D. SANTA MARIÑA'}
+            <span className="block text-[var(--club-primary,#10b981)] text-xs sm:text-base md:text-2xl mt-1 sm:mt-2 md:mt-4 not-italic font-black tracking-[0.15em] sm:tracking-[0.25em] md:tracking-[0.3em] uppercase [text-shadow:0_2px_8px_rgba(0,0,0,0.8)]">
               Resumen Activos
             </span>
           </h1>
@@ -276,10 +278,11 @@ export const Dashboard = memo(function Dashboard({
 
         <div className="flex items-center shrink-0 relative z-10">
           <img
-            src={clubCrest}
-            alt="U.D. Santa Mariña"
+            src={client?.logo_url || clubCrest}
+            alt={client?.name || 'Escudo del club'}
             className="h-16 w-16 sm:h-24 sm:w-24 md:h-32 md:w-32 object-contain drop-shadow-2xl shrink-0"
             style={{ transform: 'rotate(15deg)' }}
+            onError={(e) => { e.currentTarget.src = clubCrest; }}
           />
         </div>
       </div>

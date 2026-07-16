@@ -1,10 +1,10 @@
 import type React from 'react';
-import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight } from 'lucide-react';
+import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
 import { cn, calculateCategory } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import type { UserRole, Profile } from '../types';
+import type { UserRole, Profile, Client as ClientType, PaymentEntry } from '../types';
 import {
   buildRatingWeightsPayload,
   ClubModelWeights,
@@ -16,6 +16,7 @@ import {
 // ─── Role display config ──────────────────────────────────────────────────────
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string }> = {
   ADMIN:      { label: 'Administrador',   color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+  SUPERADMIN: { label: 'Super Admin',     color: 'text-emerald-300 bg-emerald-500/20 border-emerald-500/40' },
   COORD:      { label: 'Coordinador',     color: 'text-blue-400   bg-blue-500/10   border-blue-500/20'   },
   COORD_F11:  { label: 'Coord. F11',      color: 'text-blue-300   bg-blue-500/10   border-blue-400/20'   },
   COORD_F8:   { label: 'Coord. F8',       color: 'text-sky-400    bg-sky-500/10    border-sky-500/20'    },
@@ -31,7 +32,7 @@ const BASE_ROLES: UserRole[] = ['ADMIN', 'COORD', 'PRESID', 'ENTREN', 'SCOUT'];
 const ALL_ROLES: UserRole[] = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
 
 // ─── UsersTab ─────────────────────────────────────────────────────────────────
-function UsersTab({ currentUserRole }: { currentUserRole: UserRole }) {
+function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; clubId: string | null }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -50,16 +51,15 @@ function UsersTab({ currentUserRole }: { currentUserRole: UserRole }) {
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [feedback, setFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
 
-  const isAdmin = currentUserRole === 'ADMIN';
+  const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPERADMIN';
 
-  useEffect(() => { loadProfiles(); }, []);
+  useEffect(() => { loadProfiles(); }, [clubId]);
 
   const loadProfiles = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: true });
+    let query = supabase.from('profiles').select('*').order('created_at', { ascending: true });
+    if (clubId) query = query.eq('club_id', clubId);
+    const { data, error } = await query;
     if (!error && data) setProfiles(data as Profile[]);
     setLoading(false);
   };
@@ -152,6 +152,7 @@ function UsersTab({ currentUserRole }: { currentUserRole: UserRole }) {
       full_name: inviteName.trim() || inviteEmail.split('@')[0],
       role: inviteRole,
       active: true,
+      ...(clubId ? { club_id: clubId } : {}),
     };
     if (inviteRole === 'ENTREN' && inviteCategory) {
       profilePayload.category_id = inviteCategory;
@@ -579,22 +580,104 @@ function advanceSeason(current: string): string {
   return `${parseInt(match[1]) + 1}/${parseInt(match[2]) + 1}`;
 }
 
+// ─── Calendario de pagos (duración de contrato variable: 3, 6 o 12 meses) ────
+const CONTRACT_DURATION_OPTIONS = [3, 6, 12] as const;
+type ContractDuration = typeof CONTRACT_DURATION_OPTIONS[number];
+
+function makeEmptyPaymentLog(length: number): PaymentEntry[] {
+  return Array.from({ length }, () => ({ paid: false, paid_date: null }));
+}
+
+// Normaliza cualquier valor guardado a un array de exactamente `length` entradas.
+function normalizePaymentLog(raw: unknown, length: number): PaymentEntry[] {
+  const base = makeEmptyPaymentLog(length);
+  if (Array.isArray(raw)) {
+    for (let i = 0; i < length; i++) {
+      const e = raw[i] as any;
+      if (e && typeof e === 'object') {
+        base[i] = { paid: !!e.paid, paid_date: e.paid_date ?? null };
+      }
+    }
+  }
+  return base;
+}
+
+// Cambia la longitud del calendario conservando los meses que se solapan.
+function resizePaymentLog(prev: PaymentEntry[], newLength: number): PaymentEntry[] {
+  const base = makeEmptyPaymentLog(newLength);
+  for (let i = 0; i < Math.min(prev.length, newLength); i++) base[i] = prev[i];
+  return base;
+}
+
+const MONTH_NAMES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function addMonthsToDate(startISO: string, months: number): Date | null {
+  const start = new Date(startISO + 'T00:00:00');
+  if (isNaN(start.getTime())) return null;
+  return new Date(start.getFullYear(), start.getMonth() + months, start.getDate());
+}
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Fecha teórica de vencimiento de cada mes: fecha de activación + i meses.
+function monthLabelFromStart(startISO: string, i: number): { label: string; iso: string } {
+  if (!startISO) return { label: `Mes ${i + 1}`, iso: '' };
+  const d = addMonthsToDate(startISO, i);
+  if (!d) return { label: `Mes ${i + 1}`, iso: '' };
+  const label = `${MONTH_NAMES_ES[d.getMonth()]} ${d.getFullYear()}`;
+  return { label, iso: toISODate(d) };
+}
+
+// Fin de suscripción = fecha de activación + duración del contrato.
+function computeEndDate(startISO: string, durationMonths: number): string {
+  const d = addMonthsToDate(startISO, durationMonths);
+  return d ? toISODate(d) : '';
+}
+
 // ─── Main SettingsPanel ───────────────────────────────────────────────────────
 export function SettingsPanel({
   userRole,
+  client: currentClub,
   initialWeights = DEFAULT_CLUB_MODEL_WEIGHTS,
   onWeightsSaved,
 }: {
   userRole?: UserRole;
+  client?: ClientType | null;
   initialWeights?: ClubModelWeights;
   onWeightsSaved?: (weights: ClubModelWeights) => void;
 }) {
   const currentRole: UserRole = userRole ?? 'SCOUT';
+  const isSuperAdmin = currentRole === 'SUPERADMIN';
   const [activeTab, setActiveTab] = useState('usuarios');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [clubName, setClubName] = useState('U.D. SANTA MARIÑA');
+  const [clubName, setClubName] = useState('');
   const [season, setSeason] = useState('2026/2027');
   const [clubId, setClubId] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState('#10b981');
+  const [secondaryColor, setSecondaryColor] = useState('#0f172a');
+  const [tertiaryColor, setTertiaryColor] = useState('#f59e0b');
+  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState('trial');
+  const [subscriptionStartDate, setSubscriptionStartDate] = useState('');
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState('');
+  const [contractDuration, setContractDuration] = useState<ContractDuration>(12);
+  const [monthlyFee, setMonthlyFee] = useState('0');
+  const [paymentLog, setPaymentLog] = useState<PaymentEntry[]>(() => makeEmptyPaymentLog(12));
+  const bgFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fin de suscripción auto-generado: activación + duración del contrato.
+  useEffect(() => {
+    if (!subscriptionStartDate) return;
+    setSubscriptionEndDate(computeEndDate(subscriptionStartDate, contractDuration));
+  }, [subscriptionStartDate, contractDuration]);
+
+  // El calendario de pagos se re-dimensiona a la duración elegida (3/6/12 meses),
+  // conservando los pagos ya marcados en los meses que coinciden.
+  useEffect(() => {
+    setPaymentLog(prev => prev.length === contractDuration ? prev : resizePaymentLog(prev, contractDuration));
+  }, [contractDuration]);
 
   const [weights, setWeights] = useState([
     { id: 'tecnica', label: 'Técnica', weight: initialWeights.technique },
@@ -620,7 +703,7 @@ export function SettingsPanel({
         { id: 'potencial', label: 'Potencial', weight: initialWeights.potential },
       ]);
     });
-  }, []);
+  }, [currentClub?.id]);
 
   useEffect(() => {
     setWeights([
@@ -647,16 +730,28 @@ export function SettingsPanel({
 
   const loadSettings = async () => {
     try {
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('*')
-        .eq('name', 'U.D. SANTA MARIÑA')
-        .single();
+      const { data: club } = currentClub?.id
+        ? await supabase.from('clients').select('*').eq('id', currentClub.id).single()
+        : { data: null as ClientType | null };
       if (club) {
         setClubId(club.id);
         setClubName(club.name);
         setSeason(club.current_season);
         setLogoPreview(club.logo_url);
+        setPrimaryColor(club.primary_color || '#10b981');
+        setSecondaryColor(club.secondary_color || '#0f172a');
+        setTertiaryColor(club.tertiary_color || '#f59e0b');
+        setBackgroundPreview(club.background_image_url || null);
+        setSubscriptionStatus(club.subscription_status || 'trial');
+        setSubscriptionStartDate(club.subscription_start_date || '');
+        setSubscriptionEndDate(club.subscription_end_date || '');
+        const savedLength = Array.isArray(club.payment_log) ? club.payment_log.length : 12;
+        const duration = (CONTRACT_DURATION_OPTIONS as readonly number[]).includes(savedLength)
+          ? (savedLength as ContractDuration)
+          : 12;
+        setContractDuration(duration);
+        setMonthlyFee(String(club.monthly_fee ?? 0));
+        setPaymentLog(normalizePaymentLog(club.payment_log, duration));
       }
 
       if (club) {
@@ -737,12 +832,27 @@ export function SettingsPanel({
 
   const handleSaveClubInfo = async () => {
     try {
-      const payload = { name: clubName, current_season: season, logo_url: logoPreview };
+      const payload: Record<string, unknown> = {
+        name: clubName,
+        current_season: season,
+        logo_url: logoPreview,
+        primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        tertiary_color: tertiaryColor,
+        background_image_url: backgroundPreview,
+      };
+      if (isSuperAdmin) {
+        payload.subscription_status = subscriptionStatus;
+        payload.subscription_start_date = subscriptionStartDate || null;
+        payload.subscription_end_date = subscriptionEndDate || null;
+        payload.monthly_fee = Number(monthlyFee) || 0;
+        payload.payment_log = paymentLog;
+      }
       let error;
       if (clubId) {
-        ({ error } = await supabase.from('clubs').update(payload).eq('id', clubId));
+        ({ error } = await supabase.from('clients').update(payload).eq('id', clubId));
       } else {
-        const { data, error: err } = await supabase.from('clubs').insert([payload]).select().single();
+        const { data, error: err } = await supabase.from('clients').insert([payload]).select().single();
         if (data) setClubId(data.id);
         error = err;
       }
@@ -760,7 +870,7 @@ export function SettingsPanel({
     try {
       // Obtener temporada actual
       const { data: clubData, error: clubErr } = await supabase
-        .from('clubs').select('current_season, name').eq('id', clubId).single();
+        .from('clients').select('current_season, name').eq('id', clubId).single();
       if (clubErr || !clubData) throw new Error('No se pudo cargar el club');
       const currentSeason = clubData.current_season as string;
       const nextSeason = advanceSeason(currentSeason);
@@ -817,7 +927,7 @@ export function SettingsPanel({
       }
 
       // Avanzar temporada en el club
-      const { error: updateErr } = await supabase.from('clubs').update({ current_season: nextSeason }).eq('id', clubId);
+      const { error: updateErr } = await supabase.from('clients').update({ current_season: nextSeason }).eq('id', clubId);
       if (updateErr) throw updateErr;
 
       setSeason(nextSeason);
@@ -840,6 +950,15 @@ export function SettingsPanel({
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => setLogoPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleBackgroundChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setBackgroundPreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -878,7 +997,7 @@ export function SettingsPanel({
         </div>
 
         <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
-          {activeTab === 'usuarios' && <UsersTab currentUserRole={currentRole} />}
+          {activeTab === 'usuarios' && <UsersTab currentUserRole={currentRole} clubId={clubId} />}
 
           {activeTab === 'ratings' && (
             <div className="space-y-8">
@@ -967,9 +1086,9 @@ export function SettingsPanel({
               </div>
 
               <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center py-4 bg-slate-950/50 p-6 rounded-2xl border border-slate-800/50">
-                <div className="w-24 h-24 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-center overflow-hidden group/logo relative shadow-inner">
+                <div className="w-24 h-24 rounded-2xl flex items-center justify-center overflow-hidden group/logo relative">
                   {logoPreview ? (
-                    <img src={logoPreview} alt="Logo preview" className="w-full h-full object-contain p-2" />
+                    <img src={logoPreview} alt="Logo preview" className="w-full h-full object-contain" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-700">
                       <Shield size={32} strokeWidth={1.5} />
@@ -996,6 +1115,171 @@ export function SettingsPanel({
                 </div>
               </div>
 
+              {/* ── Foto de fondo ─────────────────────────────────────────── */}
+              <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center py-4 bg-slate-950/50 p-6 rounded-2xl border border-slate-800/50">
+                <div
+                  className="w-40 h-24 bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden bg-cover bg-center shrink-0"
+                  style={backgroundPreview ? { backgroundImage: `url(${backgroundPreview})` } : undefined}
+                />
+                <div className="space-y-4 flex-1">
+                  <div>
+                    <p className="text-sm font-bold text-slate-200">Foto de Fondo</p>
+                    <p className="text-xs text-slate-500">Se usará en la cabecera del Dashboard (campo o instalaciones del club).</p>
+                  </div>
+                  <input type="file" ref={bgFileInputRef} onChange={handleBackgroundChange} accept="image/*" className="hidden" />
+                  <button
+                    onClick={() => bgFileInputRef.current?.click()}
+                    className="flex items-center gap-2 py-3 px-6 bg-slate-800 text-slate-200 font-black rounded-xl hover:bg-slate-700 transition-all active:scale-95"
+                  >
+                    <Upload size={18} />
+                    Actualizar Foto
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Colores del club ──────────────────────────────────────── */}
+              <div className="space-y-3">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest px-1">Colores del club</label>
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { label: '1º Color', value: primaryColor, set: setPrimaryColor },
+                    { label: '2º Color', value: secondaryColor, set: setSecondaryColor },
+                    { label: '3º Color', value: tertiaryColor, set: setTertiaryColor },
+                  ].map(c => (
+                    <div key={c.label} className="space-y-1">
+                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{c.label}</span>
+                      <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-2 py-2">
+                        <input type="color" value={c.value} onChange={e => c.set(e.target.value)} className="w-8 h-8 rounded cursor-pointer bg-transparent" />
+                        <input value={c.value} onChange={e => c.set(e.target.value)} className="flex-1 min-w-0 bg-transparent text-slate-200 text-xs outline-none" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Suscripción (solo SUPERADMIN) ────────────────────────── */}
+              {isSuperAdmin && (
+                <div className="space-y-3 p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
+                  <label className="text-xs font-black text-emerald-400 uppercase tracking-widest px-1">Suscripción (solo tú la ves)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                    <div className="space-y-1.5 flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Estado</span>
+                      <select value={subscriptionStatus} onChange={e => setSubscriptionStatus(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-slate-200 text-sm outline-none focus:border-emerald-500">
+                        <option value="trial">Prueba</option>
+                        <option value="active">Activa</option>
+                        <option value="expired">Caducada</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5 flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Duración contrato</span>
+                      <select value={contractDuration} onChange={e => setContractDuration(Number(e.target.value) as ContractDuration)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-slate-200 text-sm outline-none focus:border-emerald-500">
+                        <option value={3}>3 meses</option>
+                        <option value={6}>6 meses</option>
+                        <option value={12}>1 año</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5 flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Cuota mensual (€)</span>
+                      <div className="relative">
+                        <input type="number" min="0" step="0.01" value={monthlyFee} onChange={e => setMonthlyFee(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-7 py-3 text-slate-200 text-sm outline-none focus:border-emerald-500" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">€</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Fecha de activación</span>
+                      <input type="date" value={subscriptionStartDate?.slice(0, 10) || ''} onChange={e => setSubscriptionStartDate(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-3 text-slate-200 text-sm outline-none focus:border-emerald-500 [color-scheme:dark]" />
+                    </div>
+                    <div className="space-y-1.5 flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Fin de suscripción (auto)</span>
+                      <input type="date" value={subscriptionEndDate?.slice(0, 10) || ''} readOnly disabled
+                        title="Se calcula automáticamente a partir de la fecha de activación y la duración del contrato."
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-3 text-slate-400 text-sm outline-none cursor-not-allowed [color-scheme:dark]" />
+                    </div>
+                  </div>
+
+                  {/* ── Calendario de pagos: mes a mes según duración del contrato ── */}
+                  <div className="pt-4 mt-2 border-t border-emerald-500/10">
+                    <div className="flex items-center justify-between mb-3 px-1 max-w-xs">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Calendar size={13} className="text-emerald-400" />
+                        Pagos ({paymentLog.filter(p => p.paid).length}/{paymentLog.length})
+                      </span>
+                    </div>
+                    {!subscriptionStartDate && (
+                      <p className="text-[10px] text-amber-400/80 mb-2 px-1 max-w-xs">Define la fecha de activación para ver los meses.</p>
+                    )}
+                    <div className="space-y-2 max-w-xs">
+                      {paymentLog.map((entry, i) => {
+                        const { label } = monthLabelFromStart(subscriptionStartDate?.slice(0, 10) || '', i);
+                        const isLast = i === paymentLog.length - 1;
+                        return (
+                          <div
+                            key={i}
+                            className={cn(
+                              "flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl border px-3 py-2.5 transition-colors",
+                              isLast
+                                ? "border-rose-500/40 bg-rose-500/5"
+                                : entry.paid
+                                  ? "border-emerald-500/30 bg-emerald-500/5"
+                                  : "border-slate-800 bg-slate-950/50"
+                            )}
+                          >
+                            {/* Mes */}
+                            <span className={cn(
+                              "text-xs font-black uppercase tracking-wide shrink-0",
+                              isLast ? "text-rose-400" : "text-slate-300"
+                            )}>
+                              {label}
+                            </span>
+                            <div className="flex items-center gap-2 ml-auto">
+                              {/* Check de pago */}
+                              <button
+                                type="button"
+                                onClick={() => setPaymentLog(prev => prev.map((p, idx) => idx === i
+                                  ? { paid: !p.paid, paid_date: !p.paid
+                                      ? (p.paid_date || monthLabelFromStart(subscriptionStartDate?.slice(0, 10) || '', i).iso || new Date().toISOString().slice(0, 10))
+                                      : p.paid_date }
+                                  : p))}
+                                className={cn(
+                                  "w-7 h-7 rounded-md border-2 flex items-center justify-center shrink-0 transition-all active:scale-90",
+                                  entry.paid
+                                    ? (isLast ? "bg-rose-500 border-rose-500" : "bg-emerald-500 border-emerald-500")
+                                    : "border-slate-600 hover:border-slate-400"
+                                )}
+                                aria-label={entry.paid ? 'Marcar como no pagado' : 'Marcar como pagado'}
+                              >
+                                {entry.paid && <Check size={16} strokeWidth={3.5} className="text-slate-950" />}
+                              </button>
+                              {/* Fecha del pago */}
+                              <input
+                                type="date"
+                                value={entry.paid_date?.slice(0, 10) || ''}
+                                onChange={e => setPaymentLog(prev => prev.map((p, idx) => idx === i
+                                  ? { paid: e.target.value ? true : p.paid, paid_date: e.target.value || null }
+                                  : p))}
+                                className={cn(
+                                  "w-[150px] shrink-0 bg-slate-950 border rounded-lg px-2.5 py-2 text-xs outline-none [color-scheme:dark] transition-colors",
+                                  isLast
+                                    ? "border-rose-500/30 text-rose-300 focus:border-rose-500"
+                                    : "border-slate-800 text-slate-300 focus:border-emerald-500"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2.5 px-1 leading-relaxed max-w-xs">
+                      El último mes aparece <span className="text-rose-400 font-bold">en rojo</span> para recordarte que finaliza la suscripción y toca renovar. Recuerda pulsar <span className="text-emerald-400 font-bold">Guardar cambios</span>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-6 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={handleSaveClubInfo}
@@ -1007,7 +1291,7 @@ export function SettingsPanel({
               </div>
 
               {/* ── Cierre de Temporada (solo ADMIN) ────────────────────── */}
-              {currentRole === 'ADMIN' && (
+              {(currentRole === 'ADMIN' || isSuperAdmin) && (
                 <div className="border-t border-slate-800 pt-8 space-y-5">
                   <div>
                     <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog, ContactEntry } from '../types';
-import { cn, formatRating, getStatusColor, calculateCategory, computeAge } from '../lib/utils';
+import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSportName } from '../lib/utils';
 import React, { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
@@ -529,7 +529,8 @@ export function PlayerDetail({
         (phase, detail) => {
           setUploadPhase(phase);
           if (phase === 'error' && detail) setUploadError(detail);
-        }
+        },
+        player.owner_club_id
       );
 
       if (publicUrl && onUpdatePlayer) {
@@ -890,13 +891,11 @@ export function PlayerDetail({
   const currentMainPosition = formData.main_position || player.main_position;
   const currentSecondaryPositions = formData.secondary_positions || player.secondary_positions || [];
   const printablePlayer = { ...player, ...formData } as Player;
-  // El nombre corto siempre se deriva del nombre completo (pestaña Datos), nunca del
-  // valor guardado en short_name, que puede quedar desactualizado tras una corrección.
-  const displayShortName = (
-    printablePlayer.full_name
-    || `${printablePlayer.first_name || ''} ${printablePlayer.last_name || ''}`.trim()
-    || printablePlayer.short_name
-    || ''
+  // Nombre deportivo: si short_name está relleno, usa ese. Si no, usa first_name + primer apellido.
+  const displaySportName = getSportName(
+    printablePlayer.first_name || '',
+    printablePlayer.last_name || '',
+    printablePlayer.short_name || ''
   ).toUpperCase();
   const canPrintReport = ['ADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
   const sortedReports = useMemo(() => (
@@ -1257,7 +1256,14 @@ export function PlayerDetail({
             </div>
             <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate max-w-full">{player.full_name}</h1>
+                <div className="flex flex-col items-start gap-0.5">
+                  <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate max-w-full">
+                    {getSportName(player.first_name, player.last_name, player.short_name)}
+                  </h1>
+                  <p className="text-xs sm:text-sm font-light text-slate-400 italic truncate max-w-full">
+                    {player.full_name}
+                  </p>
+                </div>
                 <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0 transition-colors", getStatusColor(currentStatus))}>
                    {PLAYER_STATUS_OPTIONS.find(o => o.value === currentStatus)?.label || currentStatus}
                 </div>
@@ -1611,7 +1617,7 @@ export function PlayerDetail({
                          
                          <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4 w-full">
                             {[
-                              { label: 'NOMBRE CORTO', value: (player.full_name || `${player.first_name || ''} ${player.last_name || ''}`.trim() || player.short_name || '').toUpperCase() },
+                              { label: 'NOMBRE DEPORTIVO', value: getSportName(player.first_name, player.last_name, player.short_name).toUpperCase() },
                               { label: 'CLUB', value: player.club_name },
                               { label: 'COMPETICIÓN', value: player.league || player.competition || 'No reg.' },
                               { label: 'POSICIÓN', value: player.main_position },
@@ -2044,7 +2050,7 @@ export function PlayerDetail({
                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {renderDataField('Nombre', 'first_name')}
                       {renderDataField('Apellidos', 'last_name')}
-                      {renderDataField('Nombre Completo', 'full_name')}
+                      {renderDataField('Nombre Deportivo', 'short_name')}
                       {renderDataField('Nacionalidad', 'nationality')}
                    </div>
 
@@ -2981,7 +2987,7 @@ export function PlayerDetail({
             <section className="pdf-mode-page">
               <div className="pdf-player-hero">
                 <div className="pdf-player-photo">{printablePlayer.avatar_url ? <img src={printablePlayer.avatar_url} alt="" /> : <span>{printablePlayer.full_name[0]}</span>}</div>
-                <div className="pdf-player-title"><span className="pdf-section-label">Resumen ejecutivo</span><h2>{printablePlayer.full_name}</h2><p>{printablePlayer.club_name || 'Club no registrado'} · {currentMainPosition}</p></div>
+                <div className="pdf-player-title"><span className="pdf-section-label">Resumen ejecutivo</span><h2>{getSportName(printablePlayer.first_name, printablePlayer.last_name, printablePlayer.short_name)}</h2><p className="pdf-player-full-name">{printablePlayer.full_name}</p><p>{printablePlayer.club_name || 'Club no registrado'} · {currentMainPosition}</p></div>
                 <div className="pdf-status"><span>Estado actual</span><strong>{PLAYER_STATUS_OPTIONS.find(option => option.value === currentStatus)?.label || currentStatus}</strong></div>
               </div>
               <div className="pdf-summary-grid">
@@ -3007,7 +3013,7 @@ export function PlayerDetail({
               <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
               <div className="pdf-full-data-grid">
                 {[
-                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displayShortName],
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displaySportName],
                   ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
                   ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
                   ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],
@@ -3027,7 +3033,8 @@ export function PlayerDetail({
             </div>
             <div className="pdf-player-title">
               <span className="pdf-section-label">Ficha de identificación</span>
-              <h2>{printablePlayer.full_name}</h2>
+              <h2>{getSportName(printablePlayer.first_name, printablePlayer.last_name, printablePlayer.short_name)}</h2>
+              <p className="pdf-player-full-name">{printablePlayer.full_name}</p>
               <p>{printablePlayer.club_name || 'Club no registrado'} · {currentMainPosition} · {calculateCategory(printablePlayer.birth_year, printablePlayer.birth_date)}</p>
             </div>
             <div className="pdf-status">
@@ -3041,7 +3048,7 @@ export function PlayerDetail({
               <div className="pdf-card-heading"><span>Datos principales</span><small>Perfil</small></div>
               <div className="pdf-data-grid">
                 {[
-                  ['Nombre corto', displayShortName],
+                  ['Nombre corto', displaySportName],
                   ['Competición', printablePlayer.league || printablePlayer.competition],
                   ['Nacimiento', printablePlayer.birth_date || printablePlayer.birth_year],
                   ['Edad', printablePlayer.calculated_age ? `${printablePlayer.calculated_age} años` : '—'],
@@ -3151,7 +3158,7 @@ export function PlayerDetail({
               <div className="pdf-characteristics-title"><div><span>Registro</span><h3>Datos del jugador</h3></div><small>Información completa</small></div>
               <div className="pdf-full-data-grid">
                 {[
-                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displayShortName],
+                  ['Nombre', printablePlayer.first_name], ['Apellidos', printablePlayer.last_name], ['Nombre completo', printablePlayer.full_name], ['Nombre corto', displaySportName],
                   ['Nacionalidad', printablePlayer.nationality], ['Lugar de nacimiento', printablePlayer.birth_place], ['Fecha nacimiento', printablePlayer.birth_date], ['Año nacimiento', printablePlayer.birth_year],
                   ['Club', printablePlayer.club_name], ['Competición', printablePlayer.league || printablePlayer.competition], ['Posición principal', currentMainPosition], ['Posiciones secundarias', currentSecondaryPositions.join(', ')],
                   ['Lateralidad', printablePlayer.lateralidad || printablePlayer.dominant_foot], ['Altura', printablePlayer.approximate_height ? `${printablePlayer.approximate_height} cm` : ''], ['Peso', printablePlayer.weight_kg ? `${printablePlayer.weight_kg} kg` : ''], ['Dorsal', printablePlayer.usual_number],

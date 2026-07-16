@@ -36,12 +36,16 @@ export const supabase = isSupabaseConfigured
   : createDummyClient();
 
 // ─── Player Photo Upload ────────────────────────────────────────────────────
-// Comprime la imagen a JPEG ≤80 KB / 400 px y la sube al bucket player-photos.
-// Devuelve la URL pública o null en caso de error.
+// Comprime la imagen a JPEG ≤80 KB / 400 px y la sube al bucket player-photos,
+// en una carpeta propia por club (bucket privado — enlace firmado, no público).
+// Devuelve un enlace firmado de larga duración o null en caso de error.
+const SIGNED_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 años
+
 export const uploadPlayerPhoto = async (
   playerId: string,
   file: File,
-  onProgress?: (phase: 'compressing' | 'uploading' | 'done' | 'error', detail?: string) => void
+  onProgress?: (phase: 'compressing' | 'uploading' | 'done' | 'error', detail?: string) => void,
+  ownerClubId?: string | null
 ): Promise<string | null> => {
   if (!isSupabaseConfigured) {
     console.warn('Supabase no está configurado. La foto no se puede subir.');
@@ -66,9 +70,10 @@ export const uploadPlayerPhoto = async (
     compressed = file;
   }
 
-  // ── 2. Subir al bucket ───────────────────────────────────────────────────
+  // ── 2. Subir al bucket, en la carpeta del club ───────────────────────────
   onProgress?.('uploading');
-  const fileName = `${playerId}.jpg`;
+  const folder = ownerClubId || 'sin-club';
+  const fileName = `${folder}/${playerId}.jpg`;
 
   const { error } = await supabase.storage
     .from('player-photos')
@@ -85,15 +90,22 @@ export const uploadPlayerPhoto = async (
     return null;
   }
 
-  // ── 3. Obtener URL pública ───────────────────────────────────────────────
-  const { data } = supabase.storage
+  // ── 3. Obtener enlace firmado (el bucket es privado) ─────────────────────
+  const { data, error: signError } = await supabase.storage
     .from('player-photos')
-    .getPublicUrl(fileName);
+    .createSignedUrl(fileName, SIGNED_URL_EXPIRY_SECONDS);
+
+  if (signError || !data) {
+    const msg = signError?.message || 'No se pudo generar el enlace de la foto';
+    console.error('Error generando enlace firmado:', msg);
+    onProgress?.('error', msg);
+    return null;
+  }
 
   // Cache-buster para forzar recarga del avatar tras actualizar
-  const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+  const signedUrl = `${data.signedUrl}&t=${Date.now()}`;
   onProgress?.('done');
-  return publicUrl;
+  return signedUrl;
 };
 
 // ─── Auth Helpers ────────────────────────────────────────────────────────────
