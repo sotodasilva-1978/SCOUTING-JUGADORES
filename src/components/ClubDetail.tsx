@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { ArrowLeft, Shield, MapPin, Users, Save, Upload, Loader2, X, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { findOrCreateClub, normalizeClubName } from '../lib/clubs';
 import { calculateCategory } from '../lib/utils';
 import imageCompression from 'browser-image-compression';
 
@@ -19,9 +20,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 interface Props {
   clubName: string;
   onBack: () => void;
+  ownerClubId?: string | null;
 }
 
-export function ClubDetail({ clubName, onBack }: Props) {
+export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -40,30 +42,38 @@ export function ClubDetail({ clubName, onBack }: Props) {
 
   useEffect(() => {
     loadData();
-  }, [clubName]);
+  }, [clubName, ownerClubId]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // Detect categories from players
-      const { data: playersData } = await supabase
+      const targetKey = normalizeClubName(clubName);
+
+      // Club GLOBAL compartido: se busca por nombre normalizado (sin
+      // acentos/mayusculas/puntuacion) para que el escudo y la localizacion
+      // configurados por un cliente aparezcan igual para todos, sin importar
+      // cómo haya escrito el nombre del club cada uno.
+      const { data: allClubs } = await supabase
+        .from('clubs')
+        .select('id, name, location, logo_url');
+      const clubData = (allClubs || []).find(c => normalizeClubName(c.name) === targetKey) || null;
+
+      // Detect categories from players — SOLO los jugadores seguidos por el
+      // cliente activo (owner_club_id), agrupados por el mismo club
+      // normalizado (nunca los de otros clientes que compartan el mismo club).
+      let playersQuery = supabase
         .from('players')
-        .select('birth_year')
-        .eq('club_name', clubName);
+        .select('birth_year, club_name');
+      if (ownerClubId) playersQuery = playersQuery.eq('owner_club_id', ownerClubId);
+      const { data: playersData } = await playersQuery;
+      const relevantPlayers = (playersData || []).filter(p => normalizeClubName(p.club_name || '') === targetKey);
 
       const catMap = new Map<string, number>();
-      for (const p of (playersData || [])) {
+      for (const p of relevantPlayers) {
         const cat = calculateCategory(p.birth_year);
         catMap.set(cat, (catMap.get(cat) || 0) + 1);
       }
       setCategories(Array.from(catMap.entries()).map(([id, count]) => ({ id, count })));
-
-      // Load club metadata
-      const { data: clubData } = await supabase
-        .from('clubs')
-        .select('id, name, location, logo_url')
-        .eq('name', clubName)
-        .maybeSingle();
 
       if (clubData) {
         setClubId(clubData.id);
@@ -91,20 +101,15 @@ export function ClubDetail({ clubName, onBack }: Props) {
       let resolvedClubId = clubId;
 
       // El ID permite usar siempre el mismo objeto de Storage para este club.
+      // Busca primero (catálogo GLOBAL) para no duplicar un club que ya haya
+      // dado de alta otro cliente antes de crear uno nuevo.
       if (!resolvedClubId) {
-        const { data: newClub, error: clubError } = await supabase
-          .from('clubs')
-          .insert([{
-            name: name.trim() || clubName,
-            location: location.trim() || null,
-            current_season: '2026/2027',
-          }])
-          .select('id')
-          .single();
-
-        if (clubError) throw clubError;
-        resolvedClubId = newClub.id;
-        setClubId(newClub.id);
+        const club = await findOrCreateClub(name.trim() || clubName, {
+          location: location.trim() || null,
+        });
+        if (!club) throw new Error('No se pudo crear el club.');
+        resolvedClubId = club.id;
+        setClubId(club.id);
       }
 
       // Comprimir manteniendo PNG para preservar transparencia de escudos
@@ -181,23 +186,40 @@ export function ClubDetail({ clubName, onBack }: Props) {
         updated_at: new Date().toISOString(),
       };
 
+      let resolvedClubId = clubId;
       if (clubId) {
         await supabase.from('clubs').update(payload).eq('id', clubId);
       } else {
-        const { data } = await supabase
-          .from('clubs')
-          .insert([payload])
-          .select()
-          .single();
-        if (data) setClubId(data.id);
+        // Busca primero (catálogo GLOBAL) para no duplicar un club que ya
+        // exista de otro cliente; si existe, actualiza sus datos en vez de
+        // crear una fila nueva.
+        const club = await findOrCreateClub(payload.name, {
+          location: payload.location,
+          logo_url: payload.logo_url,
+        });
+        if (club) {
+          resolvedClubId = club.id;
+          setClubId(club.id);
+          await supabase.from('clubs').update(payload).eq('id', club.id);
+        }
       }
 
-      // Propagate name change to players
+      // Propaga el cambio de nombre a los jugadores de TODOS los clientes que
+      // siguen este club (es un catálogo compartido). Se usa club_id (vínculo
+      // fiable) y, como red de seguridad para datos antiguos sin club_id, el
+      // texto exacto anterior.
       if (name.trim() !== originalName.current) {
+        if (resolvedClubId) {
+          await supabase
+            .from('players')
+            .update({ club_name: name.trim() })
+            .eq('club_id', resolvedClubId);
+        }
         await supabase
           .from('players')
           .update({ club_name: name.trim() })
-          .eq('club_name', originalName.current);
+          .eq('club_name', originalName.current)
+          .is('club_id', null);
         originalName.current = name.trim();
       }
 

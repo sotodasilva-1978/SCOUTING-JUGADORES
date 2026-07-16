@@ -12,6 +12,7 @@ import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSpo
 import React, { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
+import { findOrCreateClub } from '../lib/clubs';
 import { formatClubFitDisplay } from '../lib/clubModel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -1115,16 +1116,15 @@ export function PlayerDetail({
       let clubName = careerClubs.find(club => club.id === clubId)?.name || careerForm.new_club_name.trim();
 
       if (!clubId) {
-        const existing = careerClubs.find(club => club.name.toLocaleLowerCase() === clubName.toLocaleLowerCase());
-        if (existing) {
-          clubId = existing.id;
-          clubName = existing.name;
-        } else {
-          const { data, error } = await supabase.from('clubs').insert({ name: clubName, current_season: careerForm.season }).select('id,name').single();
-          if (error) throw error;
-          clubId = data.id;
-          clubName = data.name;
-          setCareerClubs(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+        // Catálogo GLOBAL de clubes: busca (ignorando acentos/mayusculas/
+        // puntuación) antes de crear, para no duplicar un club que ya exista
+        // dado de alta por otro cliente.
+        const club = await findOrCreateClub(clubName);
+        if (!club) throw new Error('No se pudo crear el club.');
+        clubId = club.id;
+        clubName = club.name;
+        if (!careerClubs.some(existing => existing.id === club.id)) {
+          setCareerClubs(prev => [...prev, club as { id: string; name: string }].sort((a, b) => a.name.localeCompare(b.name)));
         }
       }
 

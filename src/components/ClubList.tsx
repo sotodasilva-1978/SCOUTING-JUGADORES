@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Shield, MapPin, Users, ChevronRight, Search, Loader2, Building2, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { findOrCreateClub, normalizeClubName } from '../lib/clubs';
 import { calculateCategory } from '../lib/utils';
 
 type CategoryStat = { id: string; count: number };
@@ -25,9 +26,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   'PRE-BENJAMÍN': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
 };
 
-export function ClubList({ onSelectClub, onViewPlayers }: {
+export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
   onSelectClub: (clubName: string) => void;
   onViewPlayers?: (clubName: string) => void;
+  ownerClubId?: string | null;
 }) {
   const [clubs, setClubs] = useState<ClubCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ export function ClubList({ onSelectClub, onViewPlayers }: {
 
   useEffect(() => {
     fetchClubs();
-  }, []);
+  }, [ownerClubId]);
 
   const handleOpenNewClub = () => {
     setNewClubName('');
@@ -52,27 +54,13 @@ export function ClubList({ onSelectClub, onViewPlayers }: {
     if (!trimmed) return;
     setCreating(true);
     try {
-      // Check if already exists
-      const { data: existing } = await supabase
-        .from('clubs')
-        .select('id, name')
-        .eq('name', trimmed)
-        .maybeSingle();
-      if (existing) {
-        // Already exists → navigate to it
-        setShowNewClub(false);
-        onSelectClub(existing.name);
-        return;
-      }
-      // Create new
-      const { data, error } = await supabase
-        .from('clubs')
-        .insert([{ name: trimmed, current_season: '2026/2027' }])
-        .select('name')
-        .single();
-      if (error) throw error;
+      // Los clubes son un catálogo GLOBAL: busca (ignorando acentos/mayusculas/
+      // puntuación) antes de crear, para no duplicar un club que ya exista
+      // dado de alta por otro cliente.
+      const club = await findOrCreateClub(trimmed);
+      if (!club) throw new Error('No se pudo crear el club.');
       setShowNewClub(false);
-      onSelectClub(data.name);
+      onSelectClub(club.name);
     } catch (err: any) {
       alert('Error al crear el club: ' + (err?.message || err));
     } finally {
@@ -89,36 +77,46 @@ export function ClubList({ onSelectClub, onViewPlayers }: {
         .select('id, name, location, logo_url, ref_code')
         .order('name', { ascending: true });
 
-      // 2. Fetch players to compute category stats per club
-      const { data: playersData } = await supabase
+      // 2. Fetch players to compute category stats per club — SOLO los
+      //    jugadores seguidos por el cliente activo (owner_club_id), nunca
+      //    los de otros clientes que compartan el mismo club real.
+      let playersQuery = supabase
         .from('players')
         .select('club_name, birth_year')
         .not('club_name', 'is', null)
         .neq('club_name', '');
+      if (ownerClubId) playersQuery = playersQuery.eq('owner_club_id', ownerClubId);
+      const { data: playersData } = await playersQuery;
 
-      // Group players by club_name → category counts
+      // Group players by club NORMALIZADO (sin acentos/mayúsculas/puntuación)
+      // para que el mismo club real sume igual sin importar cómo cada cliente
+      // haya escrito el nombre ("Real Madrid" vs "REAL MADRID CF" vs...).
       const clubMap = new Map<string, Map<string, number>>();
+      const displayNameByKey = new Map<string, string>();
       for (const p of (playersData || [])) {
         if (!p.club_name) continue;
-        if (!clubMap.has(p.club_name)) clubMap.set(p.club_name, new Map());
-        const cats = clubMap.get(p.club_name)!;
+        const key = normalizeClubName(p.club_name);
+        if (!key) continue;
+        if (!clubMap.has(key)) clubMap.set(key, new Map());
+        if (!displayNameByKey.has(key)) displayNameByKey.set(key, p.club_name);
+        const cats = clubMap.get(key)!;
         const cat = calculateCategory(p.birth_year, (p as any).birth_date);
         cats.set(cat, (cats.get(cat) || 0) + 1);
       }
 
-      // 3. Merge: start from clubs table (all registered clubs),
-      //    then add any club that only exists via players (club_name text)
-      const registeredNames = new Set((clubsData || []).map(c => c.name));
+      // 3. Merge: start from clubs table (all registered clubs, catálogo
+      //    GLOBAL compartido), luego añade cualquier club que solo exista
+      //    como texto libre en jugadores (todavía sin fila en `clubs`).
+      const registeredKeys = new Set((clubsData || []).map(c => normalizeClubName(c.name)));
 
-      // Add player-only clubs not yet in the clubs table
-      for (const pName of clubMap.keys()) {
-        if (!registeredNames.has(pName)) {
-          (clubsData || []).push({ id: undefined as any, name: pName, location: null, logo_url: null, ref_code: null });
+      for (const [key, displayName] of displayNameByKey) {
+        if (!registeredKeys.has(key)) {
+          (clubsData || []).push({ id: undefined as any, name: displayName, location: null, logo_url: null, ref_code: null });
         }
       }
 
       const result: ClubCard[] = (clubsData || []).map(c => {
-        const catsMap = clubMap.get(c.name);
+        const catsMap = clubMap.get(normalizeClubName(c.name));
         const categories = catsMap
           ? Array.from(catsMap.entries()).map(([id, count]) => ({ id, count }))
           : [];

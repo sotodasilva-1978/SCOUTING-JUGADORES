@@ -20,6 +20,7 @@ import { LoginPage } from './components/LoginPage';
 import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
+import { findOrCreateClub } from './lib/clubs';
 import { computeAge, calculateCategory, isF11Category, isF8Category, canCreateReport, canPrintReport } from './lib/utils';
 import {
   applyClubModelToPlayer,
@@ -390,23 +391,15 @@ export default function App() {
     if (!isValidUUID(cleaned.id)) delete cleaned.id;
     
     // Fix foreign keys — resolve club_id by name (buscar-o-crear) si el UUID no
-    // existe en la tabla clubs, evitando violaciones de FK.
+    // existe en la tabla clubs, evitando violaciones de FK. Los clubes son un
+    // catálogo GLOBAL compartido por todos los clientes: NUNCA se debe crear
+    // un club nuevo si ya existe (aunque lo haya dado de alta otro cliente).
     const resolveClubByName = async () => {
       delete cleaned.club_id;
       const clubName = (cleaned.club_name || '').trim();
       if (!clubName) return;
-      const { data: existing } = await supabase
-        .from('clubs').select('id').ilike('name', clubName).limit(1);
-      if (existing && existing[0]) {
-        cleaned.club_id = existing[0].id;
-      } else {
-        const { data: created } = await supabase
-          .from('clubs')
-          .insert({ name: clubName, current_season: '2026/2027' })
-          .select('id')
-          .single();
-        if (created) cleaned.club_id = created.id;
-      }
+      const club = await findOrCreateClub(clubName);
+      if (club) cleaned.club_id = club.id;
     };
 
     if (!isValidUUID(cleaned.club_id)) {
@@ -1212,6 +1205,7 @@ export default function App() {
       return (
         <ClubDetail
           clubName={selectedClub}
+          ownerClubId={effectiveClubId}
           onBack={() => {
             setSelectedClub(null);
             setActiveTab('teams');
@@ -1269,6 +1263,7 @@ export default function App() {
       case 'teams':
         return (
           <ClubList
+            ownerClubId={effectiveClubId}
             onSelectClub={(name) => {
               setSelectedClub(name);
               setActiveTab('club_detail');
