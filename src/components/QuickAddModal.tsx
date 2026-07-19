@@ -360,7 +360,7 @@ export function QuickAddModal({ isOpen, onClose, onSave, initialData, matches = 
                         <input className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none" value={formData.main_strength} onChange={e => setFormData({...formData, main_strength: e.target.value})} />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Principal Duda</label>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Principal Debilidad</label>
                         <input className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 outline-none" value={formData.main_doubt} onChange={e => setFormData({...formData, main_doubt: e.target.value})} />
                       </div>
                     </div>

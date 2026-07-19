@@ -963,10 +963,21 @@ export function PlayerDetail({
   ), [sortedReports]);
   const latestReportSummary = {
     whyInterested: printablePlayer.why_interested?.trim() || latestReport?.key_actions || undefined,
-    mainStrength: (printablePlayer.strengths && printablePlayer.strengths.length > 0) ? printablePlayer.strengths.join(' · ') : undefined,
-    mainDoubt: (printablePlayer.weaknesses && printablePlayer.weaknesses.length > 0) ? printablePlayer.weaknesses.join(' · ') : undefined,
-    strengthsList: printablePlayer.strengths || [],
-    weaknessesList: printablePlayer.weaknesses || [],
+    mainStrength: (printablePlayer.strengths && printablePlayer.strengths.length > 0)
+      ? printablePlayer.strengths.join(' · ')
+      : (latestReport?.strengths?.length ? latestReport.strengths.join(' · ') : undefined),
+    mainDoubt: (printablePlayer.weaknesses && printablePlayer.weaknesses.length > 0)
+      ? printablePlayer.weaknesses.join(' · ')
+      : (latestReport?.weaknesses?.length ? latestReport.weaknesses.join(' · ') : undefined),
+    // Si el jugador no tiene fortalezas/debilidades propias todavía, se muestran
+    // directamente las del último informe (vinculación en vivo, sin depender
+    // de que se vuelva a guardar el informe).
+    strengthsList: (printablePlayer.strengths && printablePlayer.strengths.length > 0)
+      ? printablePlayer.strengths
+      : (latestReport?.strengths || []),
+    weaknessesList: (printablePlayer.weaknesses && printablePlayer.weaknesses.length > 0)
+      ? printablePlayer.weaknesses
+      : (latestReport?.weaknesses || []),
     differentialTalent: printablePlayer.differential_talent?.trim() || latestReport?.key_actions || undefined,
     nextStep: printablePlayer.next_step?.trim() || latestReport?.next_step || undefined,
   };
@@ -1422,7 +1433,7 @@ export function PlayerDetail({
                               )}
                            </div>
                            <div>
-                              <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1 flex items-center gap-1"><AlertCircle size={10}/> Duda</p>
+                              <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1 flex items-center gap-1"><AlertCircle size={10}/> Debilidad</p>
                               {latestReportSummary.weaknessesList.length > 0 ? (
                                 <ul className="space-y-1">
                                   {latestReportSummary.weaknessesList.map((item, index) => (
@@ -2511,7 +2522,7 @@ export function PlayerDetail({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                    {renderTextAreaField('Por qué nos interesa', 'why_interested', 'Resumen ejecutivo editable para la hoja de resumen...')}
                    {renderTextAreaField('Fortaleza Principal', 'main_strength', 'La virtud que más pesa en la valoración...')}
-                   {renderTextAreaField('Principal Duda', 'main_doubt', 'Lo que genera incertidumbre sobre el jugador...')}
+                   {renderTextAreaField('Principal Debilidad', 'main_doubt', 'Lo que genera incertidumbre sobre el jugador...')}
                    {renderTextAreaField('Próximo Paso', 'next_step', 'Siguiente acción de seguimiento (nuevo visionado, contacto, etc.)...')}
                    {renderTextAreaField('Informe Técnico', 'technical_profile', 'Lectura técnica detallada del jugador...')}
                    {renderTextAreaField('Informe Táctico', 'tactical_profile', 'Lectura táctica y comportamiento en juego...')}
@@ -2990,7 +3001,7 @@ export function PlayerDetail({
                 {[
                   ['Por qué nos interesa', printablePlayer.why_interested],
                   ['Fortaleza principal', printablePlayer.main_strength],
-                  ['Duda principal', printablePlayer.main_doubt],
+                  ['Debilidad principal', printablePlayer.main_doubt],
                   ['Talento diferencial', printablePlayer.differential_talent],
                   ['Encaje en el club', formatClubFitDisplay(printablePlayer)],
                   ['Próximo paso', printablePlayer.next_step],

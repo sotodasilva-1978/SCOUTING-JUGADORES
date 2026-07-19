@@ -33,6 +33,21 @@ export function appendDictatedListItem(existing: string | undefined | null, newT
   return `${existing.replace(/\s+$/, '')}\n${item}`;
 }
 
+/**
+ * Convierte un bloque de texto en formato de listado (líneas con guion,
+ * o el antiguo formato separado por comas) en un array de frases limpias,
+ * cada una con mayúscula inicial y punto final.
+ */
+export function parseDictatedList(text?: string | string[] | null): string[] {
+  if (!text) return [];
+  if (Array.isArray(text)) return text.map((item) => formatDictatedSentence(item)).filter(Boolean);
+  return text
+    .split(/\r?\n|,/)
+    .map((line) => line.replace(/^[\s\-•]+/, '').trim())
+    .filter(Boolean)
+    .map((line) => formatDictatedSentence(line));
+}
+
 export function getStatusColor(status: string) {
   const colors: Record<string, string> = {
     'NEW':                'bg-slate-500 text-white',

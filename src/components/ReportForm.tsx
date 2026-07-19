@@ -632,7 +632,7 @@ export function ReportForm({
                          <div className="flex items-center justify-between px-1">
                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest">Fortalezas detectadas</label>
                            <SpeechToTextButton
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: prev.strengths ? `${prev.strengths}, ${t}` : t }))}
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: appendDictatedListItem(prev.strengths, t) }))}
                            />
                          </div>
                          <textarea
@@ -644,9 +644,9 @@ export function ReportForm({
                       </div>
                       <div className="space-y-3">
                          <div className="flex items-center justify-between px-1">
-                           <label className="block text-[10px] font-black text-rose-500 uppercase tracking-widest">Dudas / Debilidades</label>
+                           <label className="block text-[10px] font-black text-rose-500 uppercase tracking-widest">Debilidades detectadas</label>
                            <SpeechToTextButton
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: prev.weaknesses ? `${prev.weaknesses}, ${t}` : t }))}
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: appendDictatedListItem(prev.weaknesses, t) }))}
                            />
                          </div>
                          <textarea

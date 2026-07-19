@@ -15,16 +15,24 @@ if (!isSupabaseConfigured) {
   console.info('Supabase URL or Anon Key is missing or placeholder. Database persistence is disabled.');
 }
 
-// Create a dummy client if not configured to avoid "Failed to fetch" spam
+// Create a dummy client if not configured so the login screen can still render.
 const createDummyClient = () => {
-  const dummyResult = { data: [], error: null };
+  const unavailableError = new Error('Supabase no está configurado.');
+  const subscription = { unsubscribe: () => undefined };
+  const auth = {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription } }),
+    signInWithPassword: async () => ({ data: { session: null }, error: unavailableError }),
+    signOut: async () => ({ error: null }),
+    resetPasswordForEmail: async () => ({ data: null, error: unavailableError }),
+  };
   const handler: ProxyHandler<any> = {
     get: (_target, prop) => {
-      // If the property is 'then', making it thenable (Promise-like)
+      if (prop === 'auth') return auth;
+      // If the property is 'then', make chained database calls awaitable.
       if (prop === 'then') {
-        return (resolve: any) => resolve(dummyResult);
+        return (resolve: any) => resolve({ data: [], error: null });
       }
-      // Otherwise, return a function that returns a new proxy for chaining
       return () => new Proxy({}, handler);
     }
   };

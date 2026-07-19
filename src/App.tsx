@@ -21,7 +21,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
 import { findOrCreateClub } from './lib/clubs';
-import { computeAge, calculateCategory, isF11Category, isF8Category } from './lib/utils';
+import { computeAge, calculateCategory, isF11Category, isF8Category, parseDictatedList } from './lib/utils';
 import {
   applyClubModelToPlayer,
   ClubModelWeights,
@@ -102,15 +102,20 @@ export default function App() {
     : (userProfile?.club_id ?? null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        const profile = await getOrCreateProfile(session.user.id, session.user.email!);
-        setUserProfile(profile);
-      } else {
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (session) {
+          const profile = await getOrCreateProfile(session.user.id, session.user.email!);
+          setUserProfile(profile);
+        }
+      })
+      .catch((error) => {
+        console.error('No se pudo restaurar la sesión:', error);
+      })
+      .finally(() => {
         setAuthLoading(false);
         setLoading(false);
-      }
-    });
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
@@ -846,8 +851,8 @@ export default function App() {
       tactical_comment: data.tactical_comment,
       physical_comment: data.physical_comment,
       mental_comment: data.mental_comment,
-      strengths: typeof data.strengths === 'string' ? data.strengths.split(',').map((s: any) => s.trim()).filter(Boolean) : data.strengths,
-      weaknesses: typeof data.weaknesses === 'string' ? data.weaknesses.split(',').map((s: any) => s.trim()).filter(Boolean) : data.weaknesses,
+      strengths: typeof data.strengths === 'string' ? parseDictatedList(data.strengths) : data.strengths,
+      weaknesses: typeof data.weaknesses === 'string' ? parseDictatedList(data.weaknesses) : data.weaknesses,
       key_actions: data.key_actions,
       doubts: data.doubts,
       next_step: data.next_step,
@@ -930,6 +935,10 @@ export default function App() {
         weight_kg: data.weight_kg ? Number(data.weight_kg) : playerToUpdate.weight_kg,
         status: data.recommendation || playerToUpdate.status,
         next_step: data.next_step || playerToUpdate.next_step,
+
+        // Fortalezas / Debilidades del resumen: nacen siempre del último informe
+        strengths: reportData.strengths?.length ? reportData.strengths : playerToUpdate.strengths,
+        weaknesses: reportData.weaknesses?.length ? reportData.weaknesses : playerToUpdate.weaknesses,
 
         // Global ratings — media de todos los informes
         rating_physical:  avgRating('rating_physical')  || playerToUpdate.rating_physical,
