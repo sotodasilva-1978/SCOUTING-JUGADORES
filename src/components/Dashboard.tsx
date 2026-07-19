@@ -1,14 +1,13 @@
 import { memo, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { 
-  Plus, ChevronRight, Star, Video, Calendar, ArrowUpRight, 
-  Users, ClipboardList, Shield, Trophy, CheckCircle2, XCircle, Clock, MapPin, MousePointer2, User, FileText, Play
+import {
+  Star, Video, Calendar, ArrowUpRight,
+  Users, ClipboardList, Play
 } from 'lucide-react';
 import { Player, Match, Report, Video as VideoType, Client } from '../types';
-import { cn, formatRating, getStatusColor, calculateCategory } from '../lib/utils';
+import { cn, formatRating, calculateCategory } from '../lib/utils';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import clubCrest from '../assets/udosantamarina.png';
 
 interface DashboardProps {

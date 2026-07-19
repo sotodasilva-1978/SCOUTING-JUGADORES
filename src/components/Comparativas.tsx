@@ -78,8 +78,6 @@ const AREAS = {
   },
 } as const;
 
-type AreaKey = keyof typeof AREAS;
-
 const GK_AREAS = {
   gk_bajo_palos: {
     label: 'BAJO PALOS',
@@ -126,8 +124,6 @@ const GK_AREAS = {
     ],
   },
 } as const;
-
-type GKAreaKey = keyof typeof GK_AREAS;
 
 const COLOR_A = { stroke: '#60a5fa', fill: 'rgba(96,165,250,0.28)',  badge: '#1e3a5f', text: '#93c5fd' };
 const COLOR_B = { stroke: '#fb7185', fill: 'rgba(251,113,133,0.25)', badge: '#4c0519', text: '#fda4af' };

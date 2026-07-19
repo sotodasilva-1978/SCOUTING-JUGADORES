@@ -1,7 +1,6 @@
 import { useState, FormEvent, useEffect, memo } from 'react';
-import { Search, Plus, Shield, MapPin, Users, ChevronRight, Globe, Trophy, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, Shield, Users, Trophy, Trash2, X, Loader2 } from 'lucide-react';
 import { MOCK_TEAMS } from '../mockData';
-import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 

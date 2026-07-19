@@ -1,4 +1,4 @@
-import { X, Save, User, MapPin, Target, Star, Calculator, Trophy, Info, FileText } from 'lucide-react';
+import { X, Save, User, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';

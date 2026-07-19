@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight, Check } from 'lucide-react';
+import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight, Check, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
 import { cn, calculateCategory } from '../lib/utils';
@@ -29,7 +29,6 @@ const ROLE_CONFIG: Record<UserRole, { label: string; color: string }> = {
 
 // Roles visibles en el selector principal (sin variantes F11/F8 que se eligen con botones)
 const BASE_ROLES: UserRole[] = ['ADMIN', 'COORD', 'PRESID', 'ENTREN', 'SCOUT'];
-const ALL_ROLES: UserRole[] = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID', 'ENTREN', 'SCOUT', 'SCOUT_F11', 'SCOUT_F8'];
 
 // ─── UsersTab ─────────────────────────────────────────────────────────────────
 function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; clubId: string | null }) {
@@ -50,6 +49,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [feedback, setFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPERADMIN';
 
@@ -73,6 +73,24 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
   };
 
   const cancelEdit = () => { setEditingId(null); };
+
+  const handleDelete = async (p: Profile) => {
+    if (!window.confirm(`¿Seguro que quieres eliminar a ${p.full_name || p.email}? Perderá el acceso a la plataforma. Esta acción no se puede deshacer.`)) return;
+    setDeletingId(p.id);
+    // Pedimos de vuelta las filas borradas: si RLS bloquea el DELETE, Supabase
+    // no devuelve error (borra 0 filas silenciosamente), así que hay que
+    // comprobar que realmente se ha eliminado algo.
+    const { data, error } = await supabase.from('profiles').delete().eq('id', p.id).select('id');
+    setDeletingId(null);
+    if (error) {
+      setFeedback({ id: p.id, ok: false, msg: error.message });
+    } else if (!data || data.length === 0) {
+      setFeedback({ id: p.id, ok: false, msg: 'No se pudo eliminar: faltan permisos (RLS) en la tabla profiles. Ejecuta fix_profiles_delete_policy_migration.sql en Supabase.' });
+    } else {
+      setProfiles(prev => prev.filter(x => x.id !== p.id));
+      if (editingId === p.id) setEditingId(null);
+    }
+  };
 
   const saveEdit = async (p: Profile) => {
     setSaving(true);
@@ -429,11 +447,32 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                     <button
                       onClick={() => startEdit(p)}
                       className="p-2 text-slate-600 hover:text-slate-200 transition-colors shrink-0"
+                      title="Editar usuario"
                     >
                       <Sliders size={15} />
                     </button>
                   )}
+
+                  {/* Delete button */}
+                  {isAdmin && !isEditing && (
+                    <button
+                      onClick={() => handleDelete(p)}
+                      disabled={deletingId === p.id}
+                      className="p-2 text-slate-600 hover:text-rose-400 transition-colors shrink-0 disabled:opacity-40"
+                      title="Eliminar usuario"
+                    >
+                      {deletingId === p.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                    </button>
+                  )}
                 </div>
+
+                {/* Feedback (view mode, p.ej. error al borrar) */}
+                {!isEditing && feedback?.id === p.id && (
+                  <div className={cn("flex items-center gap-2 mt-3 pt-3 border-t border-slate-800 text-xs font-medium", feedback.ok ? "text-emerald-400" : "text-rose-400")}>
+                    {feedback.ok ? <CheckCircle size={13} className="shrink-0" /> : <AlertCircle size={13} className="shrink-0" />}
+                    {feedback.msg}
+                  </div>
+                )}
 
                 {/* Edit inline */}
                 {isEditing && (

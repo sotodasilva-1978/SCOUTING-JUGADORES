@@ -21,7 +21,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
 import { findOrCreateClub } from './lib/clubs';
-import { computeAge, calculateCategory, isF11Category, isF8Category, canCreateReport, canPrintReport } from './lib/utils';
+import { computeAge, calculateCategory, isF11Category, isF8Category } from './lib/utils';
 import {
   applyClubModelToPlayer,
   ClubModelWeights,
@@ -88,7 +88,7 @@ export default function App() {
   const [client, setClient] = useState<Client | null>(null);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
 
   const userRole = (userProfile?.role ?? 'SCOUT') as UserRole;
@@ -112,7 +112,7 @@ export default function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
         const profile = await getOrCreateProfile(session.user.id, session.user.email!);
         setUserProfile(profile);
@@ -267,15 +267,11 @@ export default function App() {
       }
 
       // 2. Ensure a team exists
-      let teamId = null;
       const { data: teams } = await supabase.from('teams').select('id').limit(1);
-      if (teams && teams.length > 0) {
-        teamId = teams[0].id;
-      } else {
-        const { data: newTeam } = await supabase.from('teams').insert([
+      if (!teams || teams.length === 0) {
+        await supabase.from('teams').insert([
           { name: 'Primer Equipo', club_name: 'U.D. SANTA MARIÑA', category_id: 'cat-all', season: '2026/2027' }
         ]).select().single();
-        if (newTeam) teamId = newTeam.id;
       }
 
       // 3. Fetch Players (para SUPERADMIN, siempre filtrado por el club que está viendo)
@@ -287,8 +283,6 @@ export default function App() {
         console.error('Fetch players error:', playersError);
         throw playersError;
       }
-
-      console.log('Fetched players count:', playersData?.length || 0);
 
       if (playersData) {
         // Recalcular siempre la edad en cliente para no depender del valor guardado en BD
@@ -382,6 +376,12 @@ export default function App() {
     allowedFields.forEach(field => {
       if ((player as any)[field] !== undefined) {
         cleaned[field] = (player as any)[field];
+      } else if (field === 'risk_level') {
+        // risk_level puede limpiarse a "N/A" explícitamente (valor undefined
+        // intencional). A diferencia del resto de campos, aquí sí hay que
+        // enviar null para que el UPDATE lo borre en la BD en vez de omitirlo
+        // (omitir el campo dejaría el valor anterior sin cambios).
+        cleaned[field] = null;
       }
     });
 
@@ -622,7 +622,6 @@ export default function App() {
           alert('Error al guardar en la base de datos: ' + error.message);
         } else if (data && data[0]) {
           setPlayers(prev => [applyCurrentClubModel(data[0] as Player), ...prev.filter(p => p.id !== newPlayer.id)]);
-          console.log('Player persisted successfully in Supabase');
         }
       } catch (err) {
         console.error('Supabase insert failed:', err);
@@ -670,7 +669,6 @@ export default function App() {
 
   const handleUpdatePlayer = async (updatedPlayer: Player) => {
     const normalizedPlayer = applyCurrentClubModel(updatedPlayer);
-    const previousPlayer = players.find(p => p.id === normalizedPlayer.id);
 
     // Local update for immediate feedback
     setPlayers(prev => prev.map(p => p.id === normalizedPlayer.id ? normalizedPlayer : p));
@@ -682,8 +680,7 @@ export default function App() {
     try {
       if (isValidUUID(normalizedPlayer.id)) {
         const cleaned = await preparePlayerForDB(normalizedPlayer);
-        console.log('Updating player in Supabase with data:', cleaned);
-        
+
         const { error } = await supabase
           .from('players')
           .update(cleaned)
@@ -692,8 +689,6 @@ export default function App() {
         if (error) {
           console.error('Error updating player in Supabase:', error);
           alert('Error al actualizar en la base de datos: ' + error.message);
-        } else {
-           console.log('Player updated successfully in Supabase');
         }
       } else {
         console.warn('Cannot update player with non-UUID id in Supabase');
@@ -1256,7 +1251,6 @@ export default function App() {
           players={scopedPlayers}
           onSelectPlayer={handleSelectPlayer}
           onNewPlayer={() => setIsQuickAddOpen(true)}
-          onDeletePlayer={handleDeletePlayer}
           initialClubFilter={playerClubFilter}
           initialStatusFilter={playerStatusFilter}
         />;

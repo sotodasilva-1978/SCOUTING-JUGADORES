@@ -1,26 +1,22 @@
 import {
-  ArrowLeft, User, Star, Video, ClipboardList, Shield, Edit3, Trash2,
-  Calendar, Target, Zap, AlertCircle, ChevronRight, Plus, Trophy, Check,
-  History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
-  TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
-  MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
+  ArrowLeft, Star, Video, ClipboardList, Shield, Edit3, Trash2,
+  Target, Zap, AlertCircle, ChevronRight, Plus, Trophy, Check,
+  History, Settings, Image as ImageIcon, CheckCircle2,
+  TrendingUp, XCircle, Info, Eye,
+  MapPin, Gavel, MousePointer2, Loader2,
   LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink, Printer,
   HelpCircle, Upload, Link2, Youtube
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog, ContactEntry } from '../types';
 import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSportName, appendDictatedListItem } from '../lib/utils';
-import React, { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+import { useMemo, useState, useRef, useEffect, ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
 import { findOrCreateClub } from '../lib/clubs';
 import { formatClubFitDisplay } from '../lib/clubModel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { 
-  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, 
-  Radar, BarChart, Bar, XAxis, YAxis, Cell, Tooltip 
-} from 'recharts';
 
 function parseVideoEmbed(url: string): { embedUrl: string | null; platform: 'youtube' | 'vimeo' | 'other'; videoId: string | null } {
   const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -948,20 +944,6 @@ export function PlayerDetail({
     return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [reports, matches, contacts]);
   const latestReport = sortedReports[0];
-  const reportStrengths = useMemo(() => (
-    Array.from(new Set(sortedReports.flatMap((report) => report.strengths || []).map((item) => item.trim()).filter(Boolean)))
-  ), [sortedReports]);
-  const reportWeaknesses = useMemo(() => (
-    Array.from(new Set(sortedReports.flatMap((report) => report.weaknesses || []).map((item) => item.trim()).filter(Boolean)))
-  ), [sortedReports]);
-  const latestReportNarrative = latestReport
-    ? [
-        latestReport.technical_comment,
-        latestReport.tactical_comment,
-        latestReport.physical_comment,
-        latestReport.mental_comment,
-      ].find((value) => value && value.trim())
-    : undefined;
   const whyInterestedItems = useMemo(() => (
     [...sortedReports]
       .reverse()
@@ -1061,7 +1043,7 @@ export function PlayerDetail({
     );
   };
   const handleRiskLevelChange = async (newRisk: Player['risk_level']) => {
-    if (!onUpdatePlayer || !newRisk) return;
+    if (!onUpdatePlayer) return;
     setRiskSaving(true);
     setFormData((prev) => ({ ...prev, risk_level: newRisk }));
     try {

@@ -19,7 +19,7 @@ if (!isSupabaseConfigured) {
 const createDummyClient = () => {
   const dummyResult = { data: [], error: null };
   const handler: ProxyHandler<any> = {
-    get: (target, prop) => {
+    get: (_target, prop) => {
       // If the property is 'then', making it thenable (Promise-like)
       if (prop === 'then') {
         return (resolve: any) => resolve(dummyResult);
@@ -64,7 +64,6 @@ export const uploadPlayerPhoto = async (
       fileType: 'image/jpeg',   // JPEG: soporte universal en todos los navegadores
       initialQuality: 0.80,
     });
-    console.log(`Foto comprimida: ${(compressed.size / 1024).toFixed(1)} KB`);
   } catch (compressionErr) {
     console.warn('Compresión fallida, usando original:', compressionErr);
     compressed = file;

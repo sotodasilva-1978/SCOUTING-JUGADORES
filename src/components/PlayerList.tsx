@@ -1,4 +1,4 @@
-import { Search, Filter, Plus, Eye, FileText, Trash2, ChevronLeft, ChevronRight, User, X, SlidersHorizontal } from 'lucide-react';
+import { Search, Filter, Plus, Eye, FileText, ChevronLeft, ChevronRight, User, X, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, sortCategories, sortPositions, POSITION_ORDER, getSportName } from '../lib/utils';
 import { memo, useMemo, useState, ReactNode } from 'react';
@@ -8,14 +8,12 @@ export const PlayerList = memo(function PlayerList({
   players,
   onSelectPlayer,
   onNewPlayer,
-  onDeletePlayer,
   initialClubFilter,
   initialStatusFilter,
 }: {
   players: Player[],
   onSelectPlayer: (player: Player, tab?: string) => void,
   onNewPlayer: () => void,
-  onDeletePlayer?: (id: string) => void,
   initialClubFilter?: string,
   initialStatusFilter?: string,
 }) {

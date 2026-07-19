@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  ArrowLeft, Save, Star, FileText, Smartphone, Monitor, 
-  Mic, Plus, Trash2, Info, LayoutDashboard, Zap, 
-  Activity, Brain, Target, Sparkles, Loader2, Wand2
+import {
+  ArrowLeft, Save, Star, Smartphone, Monitor,
+  Mic, Trash2, Info, LayoutDashboard, Zap,
+  Activity, Brain, Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Player, Match, Report, TrajectoryEntry, CustomRating } from '../types';
+import { Player, Match, Report, CustomRating } from '../types';
 import { cn, appendDictatedListItem } from '../lib/utils';
 import { format } from 'date-fns';
 
@@ -352,7 +352,6 @@ export function ReportForm({
   userRole,
 }: ReportFormProps) {
   const [editorMode, setEditorMode] = useState<'RAPID' | 'COMPLETE'>(initialMode);
-  const [isListening, setIsListening] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   
   const selectedPlayer = useMemo(() => 
@@ -632,8 +631,8 @@ export function ReportForm({
                       <div className="space-y-3">
                          <div className="flex items-center justify-between px-1">
                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest">Fortalezas detectadas</label>
-                           <SpeechToTextButton 
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: appendDictatedListItem(prev.strengths, t) }))} 
+                           <SpeechToTextButton
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: prev.strengths ? `${prev.strengths}, ${t}` : t }))}
                            />
                          </div>
                          <textarea
@@ -646,8 +645,8 @@ export function ReportForm({
                       <div className="space-y-3">
                          <div className="flex items-center justify-between px-1">
                            <label className="block text-[10px] font-black text-rose-500 uppercase tracking-widest">Dudas / Debilidades</label>
-                           <SpeechToTextButton 
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: appendDictatedListItem(prev.weaknesses, t) }))} 
+                           <SpeechToTextButton
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: prev.weaknesses ? `${prev.weaknesses}, ${t}` : t }))}
                            />
                          </div>
                          <textarea

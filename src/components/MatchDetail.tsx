@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus, UserMinus, Link, Sparkles } from 'lucide-react';
+import { ArrowLeft, Users, FileText, Video as VideoIcon, Plus, ChevronRight, UserPlus, UserMinus, Link, Sparkles } from 'lucide-react';
 import { Match, Player, Report, Video } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
