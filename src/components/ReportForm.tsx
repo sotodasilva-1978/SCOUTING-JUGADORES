@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Match, Report, TrajectoryEntry, CustomRating } from '../types';
-import { cn } from '../lib/utils';
+import { cn, appendDictatedListItem } from '../lib/utils';
 import { format } from 'date-fns';
 
 // ── GK Radar: 10-vertex chart combining two 5-attr GK categories ─────────────
@@ -617,7 +617,7 @@ export function ReportForm({
                       <div className="flex items-center justify-between px-1">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Anotaciones Generales / Acciones Clave</label>
                         <SpeechToTextButton 
-                          onTranscript={(t) => setFormData(prev => ({ ...prev, technical_comment: prev.technical_comment ? prev.technical_comment + ' ' + t : t }))} 
+                          onTranscript={(t) => setFormData(prev => ({ ...prev, technical_comment: appendDictatedListItem(prev.technical_comment, t) }))} 
                         />
                       </div>
                       <textarea
@@ -633,7 +633,7 @@ export function ReportForm({
                          <div className="flex items-center justify-between px-1">
                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest">Fortalezas detectadas</label>
                            <SpeechToTextButton 
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: prev.strengths ? prev.strengths + ', ' + t : t }))} 
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, strengths: appendDictatedListItem(prev.strengths, t) }))} 
                            />
                          </div>
                          <textarea
@@ -647,7 +647,7 @@ export function ReportForm({
                          <div className="flex items-center justify-between px-1">
                            <label className="block text-[10px] font-black text-rose-500 uppercase tracking-widest">Dudas / Debilidades</label>
                            <SpeechToTextButton 
-                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: prev.weaknesses ? prev.weaknesses + ', ' + t : t }))} 
+                             onTranscript={(t) => setFormData(prev => ({ ...prev, weaknesses: appendDictatedListItem(prev.weaknesses, t) }))} 
                            />
                          </div>
                          <textarea
@@ -950,7 +950,7 @@ export function ReportForm({
                             <SpeechToTextButton 
                               onTranscript={(t) => setFormData(prev => ({ 
                                 ...prev, 
-                                [section.field]: (prev as any)[section.field] ? (prev as any)[section.field] + ' ' + t : t 
+                                [section.field]: appendDictatedListItem((prev as any)[section.field], t) 
                               }))} 
                             />
                          </div>

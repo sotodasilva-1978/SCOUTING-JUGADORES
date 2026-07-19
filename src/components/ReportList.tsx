@@ -94,7 +94,7 @@ export function ReportList({
           <h1 className="text-3xl font-black text-slate-100 tracking-tight italic">Últimos Informes</h1>
           <p className="text-slate-500 font-medium">Historial de evaluaciones de observadores</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button 
             onClick={() => onNewReport('RAPID')}
             className="group bg-slate-100 hover:bg-white text-slate-950 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 border-b-4 border-slate-300"
@@ -118,7 +118,7 @@ export function ReportList({
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="bg-emerald-600 p-4 rounded-2xl flex items-center justify-between shadow-2xl"
+            className="bg-emerald-600 p-4 rounded-2xl flex items-center justify-between gap-3 flex-wrap shadow-2xl"
           >
             <div className="flex items-center gap-4">
               <CheckSquare className="text-slate-950" size={20} />
@@ -126,7 +126,7 @@ export function ReportList({
                 {selectedReports.length} Informes seleccionados
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {canMerge && (
                 <button 
                   onClick={() => {

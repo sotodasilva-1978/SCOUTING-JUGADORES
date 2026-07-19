@@ -1082,7 +1082,7 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
   const [printReady, setPrintReady] = useState(false);
   const [gkOverride, setGkOverride] = useState(false);
 
-  const canPrint = ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID'].includes(userRole || '');
+  const canPrint = ['ADMIN', 'SUPERADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID'].includes(userRole || '');
 
   const handlePrint = () => {
     setShowPrintDialog(false);

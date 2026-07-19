@@ -55,42 +55,46 @@ function ClubOverviewList({ onSelectClub }: { onSelectClub: (clubId: string) => 
         const status = STATUS_LABEL[c.subscription_status || 'trial'];
         const isActive = c.subscription_status === 'active';
         return (
-          <div key={c.id} className="flex items-center gap-4 p-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl">
-            <img src={c.logo_url || '/icon-master.png'} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" onError={(e) => { e.currentTarget.src = '/icon-master.png'; }} />
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-slate-200 text-sm truncate">{c.name}</p>
-              <p className="text-[11px] text-slate-500 flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1"><UsersIcon size={11} /> {userCounts[c.id] || 0} usuarios</span>
-                {c.subscription_end_date && <span>Hasta {c.subscription_end_date}</span>}
-                {c.monthly_fee ? <span>{c.monthly_fee}€/mes</span> : null}
-              </p>
+          <div key={c.id} className="flex flex-col gap-3 p-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <img src={c.logo_url || '/icon-master.png'} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" onError={(e) => { e.currentTarget.src = '/icon-master.png'; }} />
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-200 text-sm truncate">{c.name}</p>
+                <p className="text-[11px] text-slate-500 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                  <span className="flex items-center gap-1"><UsersIcon size={11} /> {userCounts[c.id] || 0} usuarios</span>
+                  {c.subscription_end_date && <span>Hasta {c.subscription_end_date}</span>}
+                  {c.monthly_fee ? <span>{c.monthly_fee}€/mes</span> : null}
+                </p>
+              </div>
             </div>
-            <span className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border shrink-0", status.color)}>
-              {status.label}
-            </span>
-            <button
-              type="button"
-              onClick={() => onSelectClub(c.id)}
-              className="flex items-center gap-1.5 py-2 px-3 bg-slate-800 text-slate-200 text-[11px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition-colors shrink-0"
-              title="Editar foto, logo, colores y precio"
-            >
-              <Pencil size={12} /> Editar
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleAccess(c)}
-              disabled={updatingId === c.id}
-              className={cn(
-                "flex items-center gap-1.5 py-2 px-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors shrink-0 disabled:opacity-50",
-                isActive ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-              )}
-              title={isActive ? 'Cancelar acceso (impago / no renovación)' : 'Reactivar acceso'}
-            >
-              {updatingId === c.id
-                ? <Loader2 size={12} className="animate-spin" />
-                : isActive ? <Ban size={12} /> : <RotateCcw size={12} />}
-              {isActive ? 'Cancelar' : 'Activar'}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:shrink-0 sm:justify-end">
+              <span className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border shrink-0", status.color)}>
+                {status.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => onSelectClub(c.id)}
+                className="flex items-center gap-1.5 py-2 px-3 bg-slate-800 text-slate-200 text-[11px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition-colors shrink-0"
+                title="Editar foto, logo, colores y precio"
+              >
+                <Pencil size={12} /> Editar
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleAccess(c)}
+                disabled={updatingId === c.id}
+                className={cn(
+                  "flex items-center gap-1.5 py-2 px-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors shrink-0 disabled:opacity-50",
+                  isActive ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                )}
+                title={isActive ? 'Cancelar acceso (impago / no renovación)' : 'Reactivar acceso'}
+              >
+                {updatingId === c.id
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : isActive ? <Ban size={12} /> : <RotateCcw size={12} />}
+                {isActive ? 'Cancelar' : 'Activar'}
+              </button>
+            </div>
           </div>
         );
       })}

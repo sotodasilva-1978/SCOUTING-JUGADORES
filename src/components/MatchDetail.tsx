@@ -39,12 +39,12 @@ export function MatchDetail({
       <div className="flex items-center gap-4">
         <button 
           onClick={onBack}
-          className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 hover:text-white transition-all"
+          className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 hover:text-white transition-all shrink-0"
         >
           <ArrowLeft size={20} />
         </button>
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">
               {match.competition}
             </span>
@@ -52,7 +52,7 @@ export function MatchDetail({
               {format(new Date(match.date), "PPP", { locale: es })}
             </span>
           </div>
-          <h1 className="text-2xl font-black text-slate-100">{match.home_team} {match.score} {match.away_team}</h1>
+          <h1 className="text-lg sm:text-2xl font-black text-slate-100 break-words">{match.home_team} {match.score} {match.away_team}</h1>
         </div>
       </div>
 
@@ -102,12 +102,12 @@ export function MatchDetail({
       <div className="min-h-[400px]">
         {activeTab === 'jugadores' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="font-black text-slate-100 flex items-center gap-2">
                 <Users size={18} className="text-emerald-500" />
                 Jugadores Observados
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={onLinkPlayer}
                   title="Vincular jugadores de la base de datos"
@@ -177,7 +177,7 @@ export function MatchDetail({
 
         {activeTab === 'informes' && (
           <div className="space-y-6">
-             <div className="flex items-center justify-between">
+             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="font-black text-slate-100 flex items-center gap-2">
                 <FileText size={18} className="text-blue-500" />
                 Informes del Encuentro
@@ -192,15 +192,15 @@ export function MatchDetail({
             </div>
             <div className="space-y-4">
               {reports.map(report => (
-                <div key={report.id} className="bg-slate-900/50 border border-slate-800 rounded-3xl p-5 flex items-center gap-6">
-                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-black text-blue-500 text-xl">
+                <div key={report.id} className="bg-slate-900/50 border border-slate-800 rounded-3xl p-5 flex items-center gap-4 sm:gap-6">
+                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-black text-blue-500 text-xl shrink-0">
                       {report.match_rating}
                    </div>
-                   <div className="flex-1">
-                      <p className="font-bold text-slate-100">{players.find(p => p.id === report.player_id)?.full_name || 'Jugador'}</p>
+                   <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-100 truncate">{players.find(p => p.id === report.player_id)?.full_name || 'Jugador'}</p>
                       <p className="text-xs text-slate-500 mt-1 line-clamp-1">{report.recommendation} • {report.technical_comment}</p>
                    </div>
-                   <div className="text-right">
+                   <div className="text-right shrink-0">
                       <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Fecha</p>
                       <p className="text-xs font-bold text-slate-400 font-mono">{format(new Date(report.report_date), "dd/MM/yyyy")}</p>
                    </div>
@@ -218,7 +218,7 @@ export function MatchDetail({
 
         {activeTab === 'multimedia' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="font-black text-slate-100 flex items-center gap-2">
                 <VideoIcon size={18} className="text-purple-500" />
                 Colección de Vídeos

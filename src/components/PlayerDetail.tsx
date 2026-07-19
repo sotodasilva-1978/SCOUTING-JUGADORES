@@ -4,11 +4,12 @@ import {
   History, Settings, Fingerprint, Image as ImageIcon, CheckCircle2,
   TrendingUp, XCircle, Info, Ruler, Footprints, Hash, Eye, FastForward,
   MapPin, Briefcase, FileText, Scale, Gavel, MousePointer2, Loader2,
-  LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink, Printer
+  LayoutDashboard, Smartphone, Monitor, Mic, Play, ExternalLink, Printer,
+  HelpCircle, Upload, Link2, Youtube
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, Report, Match, Video as VideoType, TrajectoryEntry, HistoryLog, ContactEntry } from '../types';
-import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSportName } from '../lib/utils';
+import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSportName, appendDictatedListItem } from '../lib/utils';
 import React, { useMemo, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
@@ -462,6 +463,7 @@ export function PlayerDetail({
   const [newVideoDesc, setNewVideoDesc] = useState('');
   const [newVideoIsKey, setNewVideoIsKey] = useState(false);
   const [videoUrlError, setVideoUrlError] = useState('');
+  const [showVideoHelpModal, setShowVideoHelpModal] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'compressing' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadError, setUploadError] = useState<string>('');
   const [riskSaving, setRiskSaving] = useState(false);
@@ -791,7 +793,7 @@ export function PlayerDetail({
               onTranscript={(text) =>
                 setFormData(prev => ({
                   ...prev,
-                  [field]: prev[field] ? `${prev[field]} ${text}` : text,
+                  [field]: appendDictatedListItem(prev[field] as string, text),
                 }))
               }
             />
@@ -898,7 +900,7 @@ export function PlayerDetail({
     printablePlayer.last_name || '',
     printablePlayer.short_name || ''
   ).toUpperCase();
-  const canPrintReport = ['ADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
+  const canPrintReport = ['ADMIN', 'SUPERADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
   const sortedReports = useMemo(() => (
     [...reports].sort((a, b) => {
       const aTime = new Date(a.report_date || a.created_at || 0).getTime();
@@ -2269,7 +2271,7 @@ export function PlayerDetail({
                           value={newFieldNote}
                           onChange={(e) => setNewFieldNote(e.target.value)}
                         />
-                        <SpeechToTextButton onTranscript={(t) => setNewFieldNote((prev) => (prev ? `${prev} ${t}` : t))} />
+                        <SpeechToTextButton onTranscript={(t) => setNewFieldNote((prev) => appendDictatedListItem(prev, t))} />
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-1">
@@ -2594,6 +2596,18 @@ export function PlayerDetail({
 
             {activeTab === 'multimedia' && (
               <div className="space-y-4">
+
+                {/* Cabecera con ayuda: cómo subir un vídeo */}
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Vídeos del jugador</p>
+                  <button
+                    onClick={() => setShowVideoHelpModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-purple-500/20 border border-slate-700 hover:border-purple-500/40 rounded-xl text-slate-400 hover:text-purple-400 text-[10px] font-black uppercase tracking-widest transition-all"
+                    title="¿Cómo subo un vídeo?"
+                  >
+                    <HelpCircle size={13} /> ¿Cómo subo un vídeo?
+                  </button>
+                </div>
 
                 {/* PLAYER PRINCIPAL */}
                 {lightboxVideo && (() => {
@@ -3306,6 +3320,107 @@ export function PlayerDetail({
                 className="flex-1 py-3 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/30"
               >
                 Añadir Vídeo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AYUDA: CÓMO SUBIR UN VÍDEO */}
+      {showVideoHelpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-500/10 rounded-2xl flex items-center justify-center text-purple-400 shrink-0">
+                  <HelpCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest">¿Cómo subo un vídeo?</h3>
+                  <p className="text-slate-500 text-xs mt-0.5 font-bold">Pasos a seguir tras grabar al jugador</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowVideoHelpModal(false)}
+                className="p-2 bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all shrink-0"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed mt-4 mb-5">
+              Aquí solo se guarda el <span className="text-white font-bold">enlace</span> del vídeo, no el archivo. Por eso primero hay que subirlo a un sitio como YouTube (igual que subirías un vídeo a tu canal) y luego pegar aquí el enlace.
+            </p>
+
+            <div className="flex gap-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 mb-5">
+              <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-200 leading-snug">
+                <span className="font-black">Recomendación:</span> no subas el partido completo. Sube solo <span className="font-black">recortes cortos (clips)</span> de las jugadas más relevantes de cada jugador. Así ocupas menos espacio, subes los vídeos mucho más rápido y puedes tener más jugadores con vídeo a la vez.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                {
+                  n: 1,
+                  title: 'Graba el partido y recorta las jugadas',
+                  desc: 'Graba el partido con el móvil o la cámara y después corta solo los momentos clave del jugador (2-3 minutos por vídeo es suficiente). Evita subir el partido entero.',
+                },
+                {
+                  n: 2,
+                  title: 'Súbelo a YouTube (o Vimeo)',
+                  desc: 'Abre la app o la web de YouTube, pulsa el botón "Subir vídeo" (icono ⊕/cámara) y selecciona el recorte. Ponle un título, por ejemplo el nombre del jugador y la fecha.',
+                  icon: Youtube,
+                },
+                {
+                  n: 3,
+                  title: 'Elige visibilidad "Oculto" o "No listado"',
+                  desc: 'Para que el vídeo no aparezca en búsquedas públicas, marca la privacidad como "Oculto" (no listado). Así solo puede verlo quien tenga el enlace.',
+                  icon: Eye,
+                },
+                {
+                  n: 4,
+                  title: 'Espera a que termine de procesar y publica',
+                  desc: 'Cuando la subida y el procesado lleguen al 100%, pulsa "Listo/Publicar". El vídeo ya está disponible.',
+                  icon: Upload,
+                },
+                {
+                  n: 5,
+                  title: 'Copia el enlace del vídeo',
+                  desc: 'Pulsa "Compartir" y luego "Copiar enlace" (o copia la URL de la barra de direcciones). Ese enlace es lo que necesitas.',
+                  icon: Link2,
+                },
+                {
+                  n: 6,
+                  title: 'Vuelve aquí y pulsa "Añadir vídeo"',
+                  desc: 'Pega el enlace copiado en el campo "URL del Vídeo", añade un título y guarda. El vídeo se podrá reproducir directamente en la ficha del jugador.',
+                  icon: Video,
+                },
+              ].map(step => (
+                <div key={step.n} className="flex gap-3 bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5">
+                  <div className="w-7 h-7 rounded-full bg-purple-500/15 text-purple-400 flex items-center justify-center text-[11px] font-black shrink-0">
+                    {step.n}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-white">{step.title}</p>
+                    <p className="text-[11px] text-slate-400 leading-snug mt-1">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowVideoHelpModal(false)}
+                className="flex-1 py-3 bg-slate-800 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all"
+              >
+                Entendido
+              </button>
+              <button
+                onClick={() => { setShowVideoHelpModal(false); setShowAddVideoModal(true); }}
+                className="flex-1 py-3 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/30"
+              >
+                Subir ahora
               </button>
             </div>
           </div>

@@ -11,6 +11,28 @@ export function formatRating(rating?: number) {
   return rating.toFixed(1);
 }
 
+/**
+ * Formatea una frase dictada por voz: primera letra en mayúscula y punto final.
+ */
+export function formatDictatedSentence(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+  const capitalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  return /[.!?…]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+}
+
+/**
+ * Añade una frase dictada como un nuevo ítem de listado (una línea nueva con guion)
+ * al texto existente, en lugar de concatenarla en la misma línea/frase.
+ */
+export function appendDictatedListItem(existing: string | undefined | null, newText: string): string {
+  const formatted = formatDictatedSentence(newText);
+  if (!formatted) return existing || '';
+  const item = `- ${formatted}`;
+  if (!existing || !existing.trim()) return item;
+  return `${existing.replace(/\s+$/, '')}\n${item}`;
+}
+
 export function getStatusColor(status: string) {
   const colors: Record<string, string> = {
     'NEW':                'bg-slate-500 text-white',
