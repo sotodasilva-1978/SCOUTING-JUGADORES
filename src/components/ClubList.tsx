@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Shield, MapPin, Users, ChevronRight, Search, Loader2, Building2, Plus, X } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Shield, MapPin, Users, ChevronRight, Search, Loader2, Building2, Plus, X, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { findOrCreateClub, normalizeClubName } from '../lib/clubs';
 import { calculateCategory } from '../lib/utils';
@@ -11,6 +11,8 @@ type ClubCard = {
   id?: string;
   ref_code?: string;
   location?: string;
+  province?: string;
+  autonomous_community?: string;
   logo_url?: string;
   categories: CategoryStat[];
   total_players: number;
@@ -38,6 +40,10 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
   const [newClubName, setNewClubName] = useState('');
   const [creating, setCreating] = useState(false);
   const newClubInputRef = useRef<HTMLInputElement>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [cityFilter, setCityFilter] = useState('');
+  const [provinceFilter, setProvinceFilter] = useState('');
+  const [communityFilter, setCommunityFilter] = useState('');
 
   useEffect(() => {
     fetchClubs();
@@ -71,11 +77,25 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
   const fetchClubs = async () => {
     setLoading(true);
     try {
-      // 1. Fetch ALL clubs from the clubs table (including those without players)
-      const { data: clubsData } = await supabase
+      // 1. Fetch ALL clubs from the clubs table (including those without players).
+      //    `province`/`autonomous_community` son columnas nuevas: si la migración
+      //    todavía no se ejecutó en Supabase, la consulta falla con "column does
+      //    not exist" y se reintenta sin esas columnas para no dejar la lista vacía.
+      let clubsData: any[] | null = null;
+      const extended = await supabase
         .from('clubs')
-        .select('id, name, location, logo_url, ref_code')
+        .select('id, name, location, province, autonomous_community, logo_url, ref_code')
         .order('name', { ascending: true });
+      if (extended.error) {
+        console.warn('Columnas province/autonomous_community no disponibles todavía en `clubs` (falta ejecutar la migración). Usando consulta básica.', extended.error);
+        const basic = await supabase
+          .from('clubs')
+          .select('id, name, location, logo_url, ref_code')
+          .order('name', { ascending: true });
+        clubsData = basic.data;
+      } else {
+        clubsData = extended.data;
+      }
 
       // 2. Fetch players to compute category stats per club — SOLO los
       //    jugadores seguidos por el cliente activo (owner_club_id), nunca
@@ -111,7 +131,7 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
 
       for (const [key, displayName] of displayNameByKey) {
         if (!registeredKeys.has(key)) {
-          (clubsData || []).push({ id: undefined as any, name: displayName, location: null, logo_url: null, ref_code: null });
+          (clubsData || []).push({ id: undefined as any, name: displayName, location: null, province: null, autonomous_community: null, logo_url: null, ref_code: null });
         }
       }
 
@@ -125,6 +145,8 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
           id: c.id ?? undefined,
           ref_code: (c as any).ref_code ?? undefined,
           location: c.location ?? undefined,
+          province: (c as any).province ?? undefined,
+          autonomous_community: (c as any).autonomous_community ?? undefined,
           logo_url: c.logo_url ?? undefined,
           categories,
           total_players: categories.reduce((s, cat) => s + cat.count, 0),
@@ -139,9 +161,64 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
     }
   };
 
-  const filtered = search
-    ? clubs.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.location || '').toLowerCase().includes(search.toLowerCase()))
-    : clubs;
+  // Filtro en cascada: Comunidad Autónoma → Provincia → Ciudad. Cada nivel
+  // solo ofrece las opciones compatibles con lo ya seleccionado en el nivel
+  // superior (si eliges Galicia como comunidad, no puede aparecer Madrid
+  // como provincia ni como ciudad).
+  const communityOptions = useMemo(() => (
+    Array.from(new Set(clubs.map(c => c.autonomous_community).filter(Boolean))).sort() as string[]
+  ), [clubs]);
+
+  const provinceOptions = useMemo(() => (
+    Array.from(new Set(
+      clubs
+        .filter(c => !communityFilter || c.autonomous_community === communityFilter)
+        .map(c => c.province)
+        .filter(Boolean)
+    )).sort() as string[]
+  ), [clubs, communityFilter]);
+
+  const cityOptions = useMemo(() => (
+    Array.from(new Set(
+      clubs
+        .filter(c => !communityFilter || c.autonomous_community === communityFilter)
+        .filter(c => !provinceFilter || c.province === provinceFilter)
+        .map(c => c.location)
+        .filter(Boolean)
+    )).sort() as string[]
+  ), [clubs, communityFilter, provinceFilter]);
+
+  const handleCommunityFilterChange = (value: string) => {
+    setCommunityFilter(value);
+    // Si la provincia/ciudad ya elegidas no pertenecen a la nueva comunidad, se limpian.
+    if (provinceFilter && !clubs.some(c => c.province === provinceFilter && (!value || c.autonomous_community === value))) {
+      setProvinceFilter('');
+    }
+    if (cityFilter && !clubs.some(c => c.location === cityFilter && (!value || c.autonomous_community === value))) {
+      setCityFilter('');
+    }
+  };
+
+  const handleProvinceFilterChange = (value: string) => {
+    setProvinceFilter(value);
+    // Si la ciudad ya elegida no pertenece a la nueva provincia, se limpia.
+    if (cityFilter && !clubs.some(c => c.location === cityFilter && (!value || c.province === value))) {
+      setCityFilter('');
+    }
+  };
+
+  const filtered = clubs.filter(c => {
+    const matchesSearch = search
+      ? c.name.toLowerCase().includes(search.toLowerCase()) || (c.location || '').toLowerCase().includes(search.toLowerCase())
+      : true;
+    const matchesCity = cityFilter ? c.location === cityFilter : true;
+    const matchesProvince = provinceFilter ? c.province === provinceFilter : true;
+    const matchesCommunity = communityFilter ? c.autonomous_community === communityFilter : true;
+    return matchesSearch && matchesCity && matchesProvince && matchesCommunity;
+  });
+
+  const hasActiveFilters = !!(cityFilter || provinceFilter || communityFilter);
+  const clearFilters = () => { setCityFilter(''); setProvinceFilter(''); setCommunityFilter(''); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -184,14 +261,78 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
         </div>
       )}
 
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar club o ciudad..."
-          className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500/50 transition-colors"
-        />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar club o ciudad..."
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500/50 transition-colors"
+          />
+        </div>
+
+        {/* Toggle vista Grid / Listado */}
+        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-2xl p-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            title="Vista de cuadrícula"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              viewMode === 'grid' ? 'bg-emerald-600 text-slate-950' : 'text-slate-500 hover:text-white'
+            }`}
+          >
+            <LayoutGrid size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            title="Vista de listado"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              viewMode === 'list' ? 'bg-emerald-600 text-slate-950' : 'text-slate-500 hover:text-white'
+            }`}
+          >
+            <ListIcon size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Filtros de posición geográfica, en cascada: Comunidad → Provincia → Ciudad */}
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={communityFilter}
+          onChange={e => handleCommunityFilterChange(e.target.value)}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 transition-colors"
+        >
+          <option value="">Todas las comunidades</option>
+          {communityOptions.map(cc => <option key={cc} value={cc}>{cc}</option>)}
+        </select>
+        <select
+          value={provinceFilter}
+          onChange={e => handleProvinceFilterChange(e.target.value)}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 transition-colors"
+        >
+          <option value="">Todas las provincias</option>
+          {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select
+          value={cityFilter}
+          onChange={e => setCityFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 transition-colors"
+        >
+          <option value="">Todas las ciudades</option>
+          {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-400 transition-colors"
+          >
+            <X size={12} />
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -207,6 +348,74 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
               ? 'Añade jugadores con su club para verlos aquí'
               : 'No se encontraron clubes con ese nombre'}
           </p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800">
+          {filtered.map(club => (
+            <button
+              key={club.name}
+              onClick={() => onSelectClub(club.name)}
+              className="w-full flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 hover:bg-slate-800/40 transition-colors text-left group"
+            >
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                {club.logo_url ? (
+                  <img src={club.logo_url} alt={club.name} className="w-10 h-10 object-contain drop-shadow-md" />
+                ) : (
+                  <Shield size={22} className="text-emerald-500/60" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-black text-slate-100 group-hover:text-emerald-400 transition-colors uppercase tracking-tight truncate">
+                  {club.name}
+                </h3>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-slate-500 text-[11px] font-semibold">
+                  {club.location && (
+                    <span className="flex items-center gap-1"><MapPin size={11} className="shrink-0" />{club.location}</span>
+                  )}
+                  {club.province && <span>{club.province}</span>}
+                  {club.autonomous_community && <span className="text-slate-600">{club.autonomous_community}</span>}
+                  {!club.location && !club.province && !club.autonomous_community && (
+                    <span className="italic text-slate-700">Sin localización</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 shrink-0">
+                {club.categories.map(cat => (
+                  <span
+                    key={cat.id}
+                    className={`px-2 py-0.5 text-[9px] font-black rounded-lg border ${CATEGORY_COLORS[cat.id] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}
+                  >
+                    {cat.id}
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0">
+                {onViewPlayers && club.total_players > 0 ? (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); onViewPlayers(club.name); }}
+                    className="flex items-center gap-1.5 text-slate-500 hover:text-emerald-400 transition-colors"
+                  >
+                    <Users size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter underline-offset-2 hover:underline">
+                      {club.total_players} jugador{club.total_players !== 1 ? 'es' : ''}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-slate-600">
+                    <Users size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">
+                      {club.total_players} jugador{club.total_players !== 1 ? 'es' : ''}
+                    </span>
+                  </span>
+                )}
+                <ChevronRight size={14} className="text-slate-600 group-hover:text-emerald-400 transition-colors" />
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

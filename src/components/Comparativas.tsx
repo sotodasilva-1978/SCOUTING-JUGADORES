@@ -1066,9 +1066,10 @@ type Tab = 'radares' | 'duelo';
 interface ComparativasProps {
   players: Player[];
   userRole?: string;
+  canPrint?: boolean;
 }
 
-export function Comparativas({ players, userRole }: ComparativasProps) {
+export function Comparativas({ players, userRole, canPrint = false }: ComparativasProps) {
   const [idA, setIdA] = useState<string>(players[0]?.id ?? '');
   const [idB, setIdB] = useState<string>(players[1]?.id ?? '');
   const [tab, setTab] = useState<Tab>('duelo');
@@ -1077,8 +1078,6 @@ export function Comparativas({ players, userRole }: ComparativasProps) {
   const [printType, setPrintType] = useState<'barras' | 'radares'>('barras');
   const [printReady, setPrintReady] = useState(false);
   const [gkOverride, setGkOverride] = useState(false);
-
-  const canPrint = ['ADMIN', 'SUPERADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'PRESID'].includes(userRole || '');
 
   const handlePrint = () => {
     setShowPrintDialog(false);

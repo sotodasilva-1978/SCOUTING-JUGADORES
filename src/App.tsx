@@ -90,9 +90,14 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [, setLoading] = useState(true);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
+  const [clubsCatalogNames, setClubsCatalogNames] = useState<string[]>([]);
 
   const userRole = (userProfile?.role ?? 'SCOUT') as UserRole;
   const userId = userProfile?.user_id ?? '';
+
+  // Permiso de impresión: individual por usuario (gestionable en Usuarios y Roles),
+  // no depende del rol. ADMIN/SUPERADMIN siempre pueden, para no bloquearse a sí mismos.
+  const canPrint = userRole === 'ADMIN' || userRole === 'SUPERADMIN' || !!userProfile?.can_print;
 
   // El SUPERADMIN puede "ver como" cualquier club desde el selector del sidebar.
   // El resto de roles siempre ven el club de su propio perfil.
@@ -138,6 +143,25 @@ export default function App() {
     bootstrapAndFetch(effectiveClubId);
   }, [userProfile?.user_id, effectiveClubId]);
 
+  // Catálogo GLOBAL de clubes/equipos (tabla `clubs`, compartida por toda la
+  // plataforma), para que los desplegables de selección de equipo (p.ej. al
+  // crear un partido) muestren TODOS los clubes existentes y no solo los que
+  // ya tienen jugadores seguidos por este club/entrenador.
+  useEffect(() => {
+    if (!userProfile) return;
+    supabase
+      .from('clubs')
+      .select('name')
+      .order('name', { ascending: true })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Error al cargar catálogo de clubes:', error);
+          return;
+        }
+        setClubsCatalogNames((data || []).map((c: { name: string }) => c.name).filter(Boolean));
+      });
+  }, [userProfile?.user_id]);
+
   useEffect(() => {
     if (!effectiveClubId) { setClient(null); return; }
     supabase
@@ -167,10 +191,15 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  // Clubes/equipos ya utilizados por jugadores, para desplegables de selección
+  // Clubes/equipos disponibles para desplegables de selección: unión del
+  // catálogo global de clubes (tabla `clubs`) con los nombres ya usados por
+  // jugadores (por si algún club_name no coincide exactamente con el catálogo).
   const allClubNames = useMemo(() => (
-    Array.from(new Set(players.map(p => p.club_name).filter(Boolean))).sort() as string[]
-  ), [players]);
+    Array.from(new Set([
+      ...clubsCatalogNames,
+      ...players.map(p => p.club_name).filter(Boolean),
+    ])).sort() as string[]
+  ), [clubsCatalogNames, players]);
 
   // Jugadores filtrados según rol
   const scopedPlayers = useMemo(() => {
@@ -1172,6 +1201,7 @@ export default function App() {
         initialTab={selectedPlayerTab}
         userRole={userRole}
         userId={userId}
+        canPrint={canPrint}
         onBack={() => {
           setSelectedPlayer(null);
           setActiveTab('players');
@@ -1297,7 +1327,7 @@ export default function App() {
           userId={userId}
         />;
       case 'comparativas':
-        return <Comparativas players={scopedPlayers} userRole={userRole} />;
+        return <Comparativas players={scopedPlayers} userRole={userRole} canPrint={canPrint} />;
       case 'settings':
       case 'users':
         return <SettingsPanel

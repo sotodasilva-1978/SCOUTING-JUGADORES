@@ -13,7 +13,7 @@ import { cn, formatRating, getStatusColor, calculateCategory, computeAge, getSpo
 import { useMemo, useState, useRef, useEffect, ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, uploadPlayerPhoto } from '../lib/supabase';
-import { findOrCreateClub } from '../lib/clubs';
+import { findOrCreateClub, normalizeClubName } from '../lib/clubs';
 import { formatClubFitDisplay } from '../lib/clubModel';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -192,6 +192,26 @@ const emptyCareerForm = (): CareerFormData => ({
   matches_played: 0, minutes_played: 0, goals: 0, yellow_cards: 0, red_cards: 0,
 });
 
+const NATIONALITY_OPTIONS = [
+  ['Alemania', 'de'], ['Argelia', 'dz'], ['Argentina', 'ar'], ['Australia', 'au'], ['Austria', 'at'],
+  ['Bélgica', 'be'], ['Bolivia', 'bo'], ['Brasil', 'br'], ['Camerún', 'cm'], ['Canadá', 'ca'],
+  ['Chile', 'cl'], ['Colombia', 'co'], ['Corea del Sur', 'kr'], ['Costa de Marfil', 'ci'], ['Costa Rica', 'cr'],
+  ['Croacia', 'hr'], ['Cuba', 'cu'], ['Dinamarca', 'dk'], ['Ecuador', 'ec'], ['Egipto', 'eg'],
+  ['España', 'es'], ['Estados Unidos', 'us'], ['Finlandia', 'fi'], ['Francia', 'fr'], ['Gales', 'gb-wls'],
+  ['Ghana', 'gh'], ['Grecia', 'gr'], ['Guinea', 'gn'], ['Hungría', 'hu'], ['Inglaterra', 'gb-eng'],
+  ['Irlanda', 'ie'], ['Italia', 'it'], ['Japón', 'jp'], ['Marruecos', 'ma'], ['México', 'mx'],
+  ['Nigeria', 'ng'], ['Noruega', 'no'], ['Países Bajos', 'nl'], ['Paraguay', 'py'], ['Perú', 'pe'],
+  ['Polonia', 'pl'], ['Portugal', 'pt'], ['República Dominicana', 'do'], ['Rumanía', 'ro'], ['Senegal', 'sn'],
+  ['Serbia', 'rs'], ['Suecia', 'se'], ['Suiza', 'ch'], ['Túnez', 'tn'], ['Turquía', 'tr'],
+  ['Ucrania', 'ua'], ['Uruguay', 'uy'], ['Venezuela', 've'],
+] as const;
+
+const NATIONALITY_CODES = Object.fromEntries(NATIONALITY_OPTIONS) as Record<string, string>;
+
+function getNationalityCode(nationality?: string): string | null {
+  return nationality ? NATIONALITY_CODES[nationality] || null : null;
+}
+
 type PosData = {
   top?: string; bottom?: string;
   left?: string; right?: string;
@@ -359,6 +379,7 @@ interface PlayerDetailProps {
   initialTab?: string;
   userRole?: string;
   userId?: string;
+  canPrint?: boolean;
 }
 
 function SpeechToTextButton({ onTranscript, className }: { onTranscript: (text: string) => void; className?: string }) {
@@ -431,7 +452,8 @@ export function PlayerDetail({
   onUpdateFieldNote,
   onDeleteFieldNote,
   initialTab = 'resumen',
-  userRole
+  userRole,
+  canPrint = false
 }: PlayerDetailProps) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [editMode, setEditMode] = useState(false);
@@ -442,7 +464,7 @@ export function PlayerDetail({
   const [showCareerModal, setShowCareerModal] = useState(false);
   const [careerEntries, setCareerEntries] = useState<TrajectoryEntry[]>(player.trajectory || []);
   const [careerForm, setCareerForm] = useState<CareerFormData>(emptyCareerForm());
-  const [careerClubs, setCareerClubs] = useState<{ id: string; name: string }[]>([]);
+  const [careerClubs, setCareerClubs] = useState<{ id: string; name: string; logo_url?: string | null }[]>([]);
   const [savingCareer, setSavingCareer] = useState(false);
   const [careerError, setCareerError] = useState('');
   const [contacts, setContacts] = useState<ContactEntry[]>(player.contacts || []);
@@ -483,7 +505,7 @@ export function PlayerDetail({
     const loadCareerData = async () => {
       const [entriesResult, clubsResult, contactsResult] = await Promise.all([
         supabase.from('player_career_entries').select('*').eq('player_id', player.id).order('season', { ascending: false }),
-        supabase.from('clubs').select('id,name').order('name'),
+        supabase.from('clubs').select('id,name,logo_url').order('name'),
         supabase.from('player_contacts').select('*').eq('player_id', player.id).order('created_at', { ascending: true }),
       ]);
       if (cancelled) return;
@@ -512,6 +534,12 @@ export function PlayerDetail({
     loadCareerData();
     return () => { cancelled = true; };
   }, [player.id]);
+
+  const nationalityCode = getNationalityCode(player.nationality);
+  const currentClubLogo = useMemo(
+    () => careerClubs.find(club => normalizeClubName(club.name) === normalizeClubName(player.club_name || ''))?.logo_url || null,
+    [careerClubs, player.club_name],
+  );
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -896,7 +924,7 @@ export function PlayerDetail({
     printablePlayer.last_name || '',
     printablePlayer.short_name || ''
   ).toUpperCase();
-  const canPrintReport = ['ADMIN', 'SUPERADMIN', 'PRESID', 'COORD', 'COORD_F11', 'COORD_F8'].includes(userRole || '');
+  const canPrintReport = canPrint;
   const sortedReports = useMemo(() => (
     [...reports].sort((a, b) => {
       const aTime = new Date(a.report_date || a.created_at || 0).getTime();
@@ -1223,8 +1251,11 @@ export function PlayerDetail({
     <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-right-4 duration-500">
       {/* HEADER FIJO */}
       <div className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-xl border border-slate-800 rounded-3xl md:rounded-[2.5rem] p-4 md:p-6 shadow-2xl">
-        <div className="flex flex-col xl:flex-row gap-6 items-start">
-          <div className="flex items-center gap-4 md:gap-6 flex-1 min-w-0">
+        <div className={cn("absolute right-4 top-4 md:right-6 md:top-6 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0 transition-colors", getStatusColor(currentStatus))}>
+          {PLAYER_STATUS_OPTIONS.find(o => o.value === currentStatus)?.label || currentStatus}
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-4 md:gap-6 min-w-0 pr-28 sm:pr-36">
             <button 
               onClick={onBack}
               className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white transition-all shadow-inner shrink-0"
@@ -1242,7 +1273,6 @@ export function PlayerDetail({
                 ) : (
                   <span>{player.full_name[0]}</span>
                 )}
-                {/* Overlay al hover */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex items-center justify-center">
                   <ImageIcon size={20} className="text-white" />
                 </div>
@@ -1250,20 +1280,27 @@ export function PlayerDetail({
               <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(currentStatus))} />
             </div>
             <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex flex-col items-start gap-0.5">
-                  <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate max-w-full">
+              <div className="flex flex-col items-start gap-0.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
                     {getSportName(player.first_name, player.last_name, player.short_name)}
                   </h1>
-                  <p className="text-xs sm:text-sm font-light text-slate-400 italic truncate max-w-full">
-                    {player.full_name}
-                  </p>
+                  {nationalityCode && player.nationality && (
+                    <span className="inline-flex shrink-0 items-center" title={player.nationality}>
+                      <img src={`https://flagcdn.com/w80/${nationalityCode}.png`} alt={`Bandera de ${player.nationality}`} className="h-5 w-7 rounded-sm object-cover shadow-md ring-1 ring-white/15" />
+                    </span>
+                  )}
                 </div>
-                <div className={cn("px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-[0.15em] shadow-sm shrink-0 transition-colors", getStatusColor(currentStatus))}>
-                   {PLAYER_STATUS_OPTIONS.find(o => o.value === currentStatus)?.label || currentStatus}
-                </div>
+                <p className="text-xs sm:text-sm font-light text-slate-400 italic truncate max-w-full">
+                  {player.full_name}
+                </p>
               </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-400 truncate">
+              <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-bold text-slate-400">
+                {currentClubLogo && (
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 p-1 shadow-md ring-1 ring-white/10" title={player.club_name || 'Club actual'}>
+                    <img src={currentClubLogo} alt={`Escudo de ${player.club_name}`} className="h-full w-full object-contain" />
+                  </span>
+                )}
                 <span className="text-emerald-500">{player.club_name}</span>
                 <span className="mx-2 text-slate-700">·</span>
                 <span className="uppercase text-slate-300">{calculateCategory(player.birth_year, player.birth_date)}</span>
@@ -1273,7 +1310,7 @@ export function PlayerDetail({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 sm:flex sm:flex-wrap items-center gap-2 w-full xl:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full">
              {canPrintReport && (
                <button
                  onClick={() => setShowPrintSelector(true)}
@@ -2046,7 +2083,7 @@ export function PlayerDetail({
                       {renderDataField('Nombre', 'first_name')}
                       {renderDataField('Apellidos', 'last_name')}
                       {renderDataField('Nombre Deportivo', 'short_name')}
-                      {renderDataField('Nacionalidad', 'nationality')}
+                      {renderDataField('Nacionalidad', 'nationality', 'select', NATIONALITY_OPTIONS.map(([value]) => ({ value, label: value })))}
                    </div>
 
                    {/* Bloque Nacimiento */}

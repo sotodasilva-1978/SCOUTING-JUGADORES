@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight, Check, Trash2 } from 'lucide-react';
+import { Shield, Users, Database, Save, CheckCircle, AlertCircle, UserPlus, Sliders, Upload, X, ChevronDown, Loader2, Eye, EyeOff, RefreshCw, Calendar, ArrowRight, Check, Trash2, Printer, PrinterCheck, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
 import { cn, calculateCategory } from '../lib/utils';
@@ -38,6 +38,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
   const [editRole, setEditRole] = useState<UserRole>('SCOUT');
   const [editCategory, setEditCategory] = useState('');
   const [editActive, setEditActive] = useState(true);
+  const [editCanPrint, setEditCanPrint] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -50,8 +51,41 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [feedback, setFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetPasswordVisible, setResetPasswordVisible] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const isAdmin = currentUserRole === 'ADMIN' || currentUserRole === 'SUPERADMIN';
+  const isSuperAdmin = currentUserRole === 'SUPERADMIN';
+
+  const startResetPassword = (p: Profile) => {
+    setResetPasswordId(p.id);
+    setResetPasswordValue('');
+    setFeedback(null);
+  };
+
+  const cancelResetPassword = () => { setResetPasswordId(null); setResetPasswordValue(''); };
+
+  const handleResetPassword = async (p: Profile) => {
+    if (resetPasswordValue.trim().length < 8) {
+      setFeedback({ id: p.id, ok: false, msg: 'La contraseña debe tener al menos 8 caracteres.' });
+      return;
+    }
+    setResettingPassword(true);
+    const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+      body: { userId: p.user_id, newPassword: resetPasswordValue.trim() },
+    });
+    setResettingPassword(false);
+    if (error || !data?.ok) {
+      setFeedback({ id: p.id, ok: false, msg: data?.error || error?.message || 'Error al resetear la contraseña.' });
+      return;
+    }
+    setFeedback({ id: p.id, ok: true, msg: 'Contraseña actualizada correctamente.' });
+    setResetPasswordId(null);
+    setResetPasswordValue('');
+    setTimeout(() => setFeedback(null), 4000);
+  };
 
   useEffect(() => { loadProfiles(); }, [clubId]);
 
@@ -69,6 +103,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
     setEditRole(p.role);
     setEditCategory(p.category_id ?? '');
     setEditActive(p.active);
+    setEditCanPrint(!!p.can_print);
     setFeedback(null);
   };
 
@@ -97,6 +132,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
     const updatePayload: Record<string, unknown> = {
       role: editRole,
       active: editActive,
+      can_print: editCanPrint,
       updated_at: new Date().toISOString(),
       category_id: editRole === 'ENTREN' ? (editCategory || null) : null,
     };
@@ -108,7 +144,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
     if (error) {
       setFeedback({ id: p.id, ok: false, msg: error.message });
     } else {
-      setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, role: editRole, active: editActive } : x));
+      setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, role: editRole, active: editActive, can_print: editCanPrint } : x));
       setEditingId(null);
       setFeedback({ id: p.id, ok: true, msg: 'Guardado correctamente' });
       setTimeout(() => setFeedback(null), 3000);
@@ -170,6 +206,7 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
       full_name: inviteName.trim() || inviteEmail.split('@')[0],
       role: inviteRole,
       active: true,
+      can_print: ['ADMIN', 'SUPERADMIN', 'PRESID'].includes(inviteRole),
       ...(clubId ? { club_id: clubId } : {}),
     };
     if (inviteRole === 'ENTREN' && inviteCategory) {
@@ -442,8 +479,21 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                     </span>
                   )}
 
+                  {/* Print permission badge (view mode) */}
+                  {!isEditing && (
+                    <span
+                      title={p.can_print ? 'Puede imprimir informes' : 'No puede imprimir informes'}
+                      className={cn(
+                        "hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold uppercase shrink-0",
+                        p.can_print ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-slate-500 bg-slate-800/50 border-slate-700"
+                      )}
+                    >
+                      {p.can_print ? <PrinterCheck size={12} /> : <Printer size={12} />}
+                    </span>
+                  )}
+
                   {/* Edit button */}
-                  {isAdmin && !isEditing && (
+                  {isAdmin && !isEditing && resetPasswordId !== p.id && (
                     <button
                       onClick={() => startEdit(p)}
                       className="p-2 text-slate-600 hover:text-slate-200 transition-colors shrink-0"
@@ -453,8 +503,19 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                     </button>
                   )}
 
+                  {/* Reset password button (solo Super Admin) */}
+                  {isSuperAdmin && !isEditing && resetPasswordId !== p.id && (
+                    <button
+                      onClick={() => startResetPassword(p)}
+                      className="p-2 text-slate-600 hover:text-amber-400 transition-colors shrink-0"
+                      title="Resetear contraseña"
+                    >
+                      <KeyRound size={15} />
+                    </button>
+                  )}
+
                   {/* Delete button */}
-                  {isAdmin && !isEditing && (
+                  {isAdmin && !isEditing && resetPasswordId !== p.id && (
                     <button
                       onClick={() => handleDelete(p)}
                       disabled={deletingId === p.id}
@@ -467,11 +528,63 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                 </div>
 
                 {/* Feedback (view mode, p.ej. error al borrar) */}
-                {!isEditing && feedback?.id === p.id && (
+                {!isEditing && resetPasswordId !== p.id && feedback?.id === p.id && (
                   <div className={cn("flex items-center gap-2 mt-3 pt-3 border-t border-slate-800 text-xs font-medium", feedback.ok ? "text-emerald-400" : "text-rose-400")}>
                     {feedback.ok ? <CheckCircle size={13} className="shrink-0" /> : <AlertCircle size={13} className="shrink-0" />}
                     {feedback.msg}
                   </div>
+                )}
+
+                {/* Reset password inline (solo Super Admin) */}
+                {resetPasswordId === p.id && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-4 pt-4 border-t border-slate-800 space-y-3"
+                  >
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      Nueva contraseña para {p.full_name || p.email}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={resetPasswordVisible ? 'text' : 'password'}
+                        value={resetPasswordValue}
+                        onChange={e => setResetPasswordValue(e.target.value)}
+                        placeholder="Mínimo 8 caracteres"
+                        minLength={8}
+                        className="w-full bg-slate-800 border border-amber-500/30 rounded-xl px-4 pr-10 py-2.5 text-sm text-slate-200 outline-none focus:border-amber-500/60 transition-all"
+                      />
+                      <button type="button" onClick={() => setResetPasswordVisible(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition-colors">
+                        {resetPasswordVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+
+                    {feedback?.id === p.id && (
+                      <div className={cn("flex items-center gap-2 text-xs font-medium", feedback.ok ? "text-emerald-400" : "text-rose-400")}>
+                        {feedback.ok ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+                        {feedback.msg}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 justify-end">
+                      <button
+                        type="button"
+                        onClick={cancelResetPassword}
+                        className="px-4 py-2 text-xs font-black text-slate-400 hover:text-white transition-colors uppercase tracking-widest"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleResetPassword(p)}
+                        disabled={resettingPassword || resetPasswordValue.trim().length < 8}
+                        className="flex items-center gap-2 px-5 py-2 bg-amber-500 text-slate-900 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-amber-400 disabled:opacity-50 transition-all"
+                      >
+                        {resettingPassword ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
+                        Fijar contraseña
+                      </button>
+                    </div>
+                  </motion.div>
                 )}
 
                 {/* Edit inline */}
@@ -512,6 +625,27 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                           {editActive ? 'Activo' : 'Inactivo'}
                           <div className={cn("w-8 h-4 rounded-full transition-colors relative", editActive ? "bg-emerald-500" : "bg-slate-700")}>
                             <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all", editActive ? "left-4" : "left-0.5")} />
+                          </div>
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Permiso de impresión</label>
+                        <button
+                          type="button"
+                          onClick={() => setEditCanPrint(v => !v)}
+                          className={cn(
+                            "w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-sm font-bold transition-all",
+                            editCanPrint
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : "bg-slate-800 border-slate-700 text-slate-400"
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            {editCanPrint ? <PrinterCheck size={14} /> : <Printer size={14} />}
+                            {editCanPrint ? 'Puede imprimir' : 'No puede imprimir'}
+                          </span>
+                          <div className={cn("w-8 h-4 rounded-full transition-colors relative", editCanPrint ? "bg-emerald-500" : "bg-slate-700")}>
+                            <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all", editCanPrint ? "left-4" : "left-0.5")} />
                           </div>
                         </button>
                       </div>

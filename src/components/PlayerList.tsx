@@ -4,6 +4,21 @@ import { cn, formatRating, getStatusColor, getStatusLabel, calculateCategory, so
 import { memo, useMemo, useState, ReactNode } from 'react';
 import { Player } from '../types';
 
+const CATEGORY_COLORS: Record<string, string> = {
+  SENIOR: '#8b5cf6',
+  JUVENIL: '#ec4899',
+  CADETE: '#06b6d4',
+  INFANTIL: '#f87171',
+  'ALEVÍN': '#fbbf24',
+  ALEVIN: '#fbbf24',
+  'BENJAMÍN': '#fbbf24',
+  BENJAMIN: '#fbbf24',
+  'PRE-BENJAMÍN': '#fbbf24',
+  'PRE-BENJAMIN': '#fbbf24',
+  DEBUTANTE: '#fbbf24',
+  'SIN REGISTRO': '#475569',
+};
+
 export const PlayerList = memo(function PlayerList({
   players,
   onSelectPlayer,
@@ -344,12 +359,11 @@ export const PlayerList = memo(function PlayerList({
                   <td className="py-5 px-4 relative">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 scale-y-0 group-hover:scale-y-100 transition-transform origin-center rounded-r-full" />
                     <div className="flex items-center gap-4">
-                       <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 overflow-hidden shadow-inner group-hover:border-emerald-500/30 transition-colors">
+                       <div className="w-12 h-12 rounded-2xl bg-slate-900 border-2 border-slate-700 flex items-center justify-center font-bold text-slate-400 overflow-hidden shadow-lg shadow-black/20 group-hover:border-emerald-500/50 group-hover:scale-105 transition-all">
                          {player.avatar_url ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover object-[center_20%]" /> : <User className="w-6 h-6 opacity-40" />}
                        </div>
                        <div>
                          <p className="font-black text-slate-100 group-hover:text-emerald-400 transition-colors tracking-tight">{getSportName(player.first_name, player.last_name, player.short_name)}</p>
-                         <p className="text-xs font-light text-slate-500 italic">{player.full_name}</p>
                        </div>
                     </div>
                   </td>
@@ -362,7 +376,7 @@ export const PlayerList = memo(function PlayerList({
                     <p className="text-slate-300 font-bold tracking-tight text-sm">{player.club_name || 'Sin equipo'}</p>
                   </td>
                   <td className="py-5 px-4">
-                    <p className="text-[9px] text-emerald-500 uppercase font-black tracking-[0.1em]">{calculateCategory(player.birth_year, player.birth_date)}</p>
+                    <p className="text-[9px] uppercase font-black tracking-[0.1em]" style={{ color: CATEGORY_COLORS[calculateCategory(player.birth_year, player.birth_date)] || '#475569' }}>{calculateCategory(player.birth_year, player.birth_date)}</p>
                   </td>
                   <td className="py-5 px-4">
                     <span className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 group-hover:text-emerald-400 group-hover:border-emerald-500/20 transition-all shadow-sm">
@@ -434,9 +448,8 @@ export const PlayerList = memo(function PlayerList({
                     </div>
                     <div>
                       <h4 className="font-black text-slate-100 tracking-tight group-hover:text-emerald-400 transition-colors truncate max-w-[160px] sm:max-w-none">{getSportName(player.first_name, player.last_name, player.short_name)}</h4>
-                      <p className="text-xs font-light text-slate-500 italic truncate max-w-[160px] sm:max-w-none">{player.full_name}</p>
                       <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1 truncate max-w-[160px] sm:max-w-none">
-                        {player.main_position} · {calculateCategory(player.birth_year, player.birth_date)} · {player.birth_year || 'N/R'} ({player.calculated_age}A)
+                        {player.main_position} · <span style={{ color: CATEGORY_COLORS[calculateCategory(player.birth_year, player.birth_date)] || '#475569' }}>{calculateCategory(player.birth_year, player.birth_date)}</span> · {player.birth_year || 'N/R'} ({player.calculated_age}A)
                       </p>
                     </div>
                   </div>

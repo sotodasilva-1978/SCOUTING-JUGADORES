@@ -1,8 +1,9 @@
 import React from 'react';
-import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair, Building2 } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair, Building2, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn, getRoleLabel } from '../lib/utils';
 import type { Profile, Client } from '../types';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -62,6 +63,7 @@ function BrandMark({ size = 44, logoUrl }: { size?: number; logoUrl?: string | n
 
 export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, role, userProfile, client, allClients, viewAsClubId, onChangeViewAsClub, onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [showChangePassword, setShowChangePassword] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   // Drag-to-scroll state
@@ -176,8 +178,14 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
             <ChevronRight className={cn("w-5 h-5 transition-transform duration-300", isCollapsed ? "rotate-0" : "rotate-180")} />
           </button>
           <button
+            onClick={() => setShowChangePassword(true)}
+            className={cn("w-full flex items-center mt-3 p-2 text-slate-500 hover:bg-slate-800/60 hover:text-slate-200 rounded-lg transition-all", isCollapsed && "justify-center")}>
+            <KeyRound className="w-5 h-5 flex-shrink-0" />
+            {!isCollapsed && <span className="ml-3 text-xs font-black uppercase tracking-widest">Contraseña</span>}
+          </button>
+          <button
             onClick={onLogout}
-            className={cn("w-full flex items-center mt-3 p-2 text-rose-500/80 hover:bg-rose-500/10 rounded-lg transition-all", isCollapsed && "justify-center")}>
+            className={cn("w-full flex items-center mt-1 p-2 text-rose-500/80 hover:bg-rose-500/10 rounded-lg transition-all", isCollapsed && "justify-center")}>
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {!isCollapsed && <span className="ml-3 text-xs font-black uppercase tracking-widest">Salir</span>}
           </button>
@@ -233,6 +241,16 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
             );
           })}
 
+          {/* Botón Contraseña */}
+          <button
+            onClick={() => setShowChangePassword(true)}
+            className="flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-2xl flex-shrink-0 text-slate-500 hover:bg-slate-800/60 hover:text-slate-200 transition-all active:scale-95"
+            style={{ minWidth: 60 }}
+          >
+            <KeyRound size={18} strokeWidth={2} />
+            <span className="text-[9px] font-black uppercase tracking-wider leading-none">Clave</span>
+          </button>
+
           {/* Botón Salir al final */}
           <button
             onClick={onLogout}
@@ -244,6 +262,10 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
           </button>
         </div>
       </nav>
+
+      {showChangePassword && userProfile && (
+        <ChangePasswordModal email={userProfile.email} onClose={() => setShowChangePassword(false)} />
+      )}
     </>
   );
 });

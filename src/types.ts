@@ -14,6 +14,7 @@ export interface Profile {
   club_id: string;
   category_id?: string;
   active: boolean;
+  can_print?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,8 @@ export interface Club {
   current_season: string;
   logo_url?: string;
   location?: string;
+  province?: string;
+  autonomous_community?: string;
   created_at: string;
   updated_at: string;
 }
