@@ -455,21 +455,21 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
                   ? "bg-slate-900 border-emerald-500/30"
                   : "bg-slate-950 border-slate-800 hover:border-slate-700"
               )}>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center sm:gap-4">
                   {/* Avatar */}
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-400 text-sm shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-slate-400 text-base shrink-0">
                     {(p.full_name || p.email)[0].toUpperCase()}
                   </div>
 
                   {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-200 truncate">{p.full_name || '—'}</p>
-                    <p className="text-xs text-slate-500 truncate">{p.email}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-200 leading-tight whitespace-normal break-words">{p.full_name || '—'}</p>
+                    <p className="hidden sm:block text-xs text-slate-500 truncate">{p.email}</p>
                   </div>
 
                   {/* Role badge (view mode) */}
                   {!isEditing && (
-                    <span className={cn("hidden sm:inline-flex px-2.5 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wide shrink-0", cfg.color)}>
+                    <span className={cn("inline-flex px-2.5 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wide shrink-0", cfg.color)}>
                       {cfg.label}
                     </span>
                   )}

@@ -535,10 +535,15 @@ export function PlayerDetail({
     return () => { cancelled = true; };
   }, [player.id]);
 
-  const nationalityCode = getNationalityCode(player.nationality);
+  const headerClubName = formData.club_name || player.club_name;
+  const headerNationality = formData.nationality || player.nationality;
+  const headerCompetition = formData.league || formData.competition || player.league || player.competition || 'Sin competición';
+  const headerCategory = calculateCategory(formData.birth_year || player.birth_year, formData.birth_date || player.birth_date);
+  const headerBirthYear = formData.birth_year || player.birth_year;
+  const nationalityCode = getNationalityCode(headerNationality);
   const currentClubLogo = useMemo(
-    () => careerClubs.find(club => normalizeClubName(club.name) === normalizeClubName(player.club_name || ''))?.logo_url || null,
-    [careerClubs, player.club_name],
+    () => careerClubs.find(club => normalizeClubName(club.name) === normalizeClubName(headerClubName || ''))?.logo_url || null,
+    [careerClubs, headerClubName],
   );
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1255,16 +1260,16 @@ export function PlayerDetail({
           {PLAYER_STATUS_OPTIONS.find(o => o.value === currentStatus)?.label || currentStatus}
         </div>
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-4 md:gap-6 min-w-0 pr-28 sm:pr-36">
+          <div className="flex items-start gap-3 md:gap-6 min-w-0 pr-24 sm:pr-36">
             <button 
               onClick={onBack}
-              className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white transition-all shadow-inner shrink-0"
+              className="mt-1 p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 hover:text-white transition-all shadow-inner shrink-0"
             >
               <ArrowLeft size={18} />
             </button>
             <div className="relative group/avatar shrink-0">
               <div
-                className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-2xl md:text-3xl text-emerald-500 shadow-2xl overflow-hidden cursor-pointer"
+                className="w-20 h-20 md:w-20 md:h-20 rounded-3xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center font-black text-2xl md:text-3xl text-emerald-500 shadow-2xl overflow-hidden cursor-pointer"
                 onClick={() => uploadPhase === 'idle' && fileInputRef.current?.click()}
                 title="Haz clic para cambiar la foto"
               >
@@ -1279,34 +1284,58 @@ export function PlayerDetail({
               </div>
               <div className={cn("absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-slate-950 shadow-lg", getTrafficLightColor(currentStatus))} />
             </div>
-            <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
-              <div className="flex flex-col items-start gap-0.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h1 className="text-base sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-black text-white uppercase tracking-tight break-words">
                     {getSportName(player.first_name, player.last_name, player.short_name)}
                   </h1>
-                  {nationalityCode && player.nationality && (
-                    <span className="inline-flex shrink-0 items-center" title={player.nationality}>
-                      <img src={`https://flagcdn.com/w80/${nationalityCode}.png`} alt={`Bandera de ${player.nationality}`} className="h-5 w-7 rounded-sm object-cover shadow-md ring-1 ring-white/15" />
+                  {nationalityCode && headerNationality && (
+                    <span className="inline-flex shrink-0 items-center" title={headerNationality}>
+                      <img src={`https://flagcdn.com/w80/${nationalityCode}.png`} alt={`Bandera de ${headerNationality}`} className="h-5 w-7 rounded-sm object-cover shadow-md ring-1 ring-white/15" />
                     </span>
                   )}
                 </div>
-                <p className="text-xs sm:text-sm font-light text-slate-400 italic truncate max-w-full">
+                <p className="text-sm font-light text-slate-400 italic break-words">
                   {player.full_name}
                 </p>
               </div>
-              <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-bold text-slate-400">
+              <p className="hidden sm:flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm font-bold text-slate-400">
                 {currentClubLogo && (
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 p-1 shadow-md ring-1 ring-white/10" title={player.club_name || 'Club actual'}>
-                    <img src={currentClubLogo} alt={`Escudo de ${player.club_name}`} className="h-full w-full object-contain" />
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 p-1 shadow-md ring-1 ring-white/10" title={headerClubName || 'Club actual'}>
+                    <img src={currentClubLogo} alt={`Escudo de ${headerClubName}`} className="h-full w-full object-contain" />
                   </span>
                 )}
-                <span className="text-emerald-500">{player.club_name}</span>
+                <span className="text-emerald-500">{headerClubName}</span>
                 <span className="mx-2 text-slate-700">·</span>
-                <span className="uppercase text-slate-300">{calculateCategory(player.birth_year, player.birth_date)}</span>
+                <span className="uppercase text-slate-300">{headerCategory}</span>
                 <span className="mx-2 text-slate-700">·</span>
                 <span>{player.birth_year} ({player.calculated_age} años)</span>
               </p>
+              <div className="flex flex-wrap gap-2 sm:hidden">
+                {currentClubLogo && (
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 ring-1 ring-white/10">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-950/80 p-1">
+                      <img src={currentClubLogo} alt={`Escudo de ${headerClubName}`} className="h-full w-full object-contain" />
+                    </span>
+                    <span className="text-emerald-400">{headerClubName}</span>
+                  </span>
+                )}
+                {!currentClubLogo && headerClubName && (
+                  <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-bold text-emerald-400 ring-1 ring-white/10">
+                    {headerClubName}
+                  </span>
+                )}
+                <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 ring-1 ring-white/10 uppercase">
+                  {headerCategory}
+                </span>
+                <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 ring-1 ring-white/10">
+                  {headerBirthYear} ({player.calculated_age} años)
+                </span>
+                <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-bold text-slate-300 ring-1 ring-white/10">
+                  {headerCompetition}
+                </span>
+              </div>
             </div>
           </div>
 

@@ -527,9 +527,7 @@ export function MyBestTeam({
         </div>
 
         <div className="p-4">
-          <div className="max-w-[1040px] mx-auto">
-            <PitchBoard slotBoards={slotBoards} onSelectPlayer={onSelectPlayer} metric={metric} />
-          </div>
+          <PitchBoard slotBoards={slotBoards} onSelectPlayer={onSelectPlayer} metric={metric} />
         </div>
       </section>
 
