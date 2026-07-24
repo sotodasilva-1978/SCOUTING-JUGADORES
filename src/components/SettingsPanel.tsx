@@ -4,7 +4,8 @@ import { motion } from 'motion/react';
 import { useState, useRef, useEffect } from 'react';
 import { cn, calculateCategory } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import type { UserRole, Profile, Client as ClientType, PaymentEntry } from '../types';
+import type { UserRole, Profile, Client as ClientType, PaymentEntry, PlanType } from '../types';
+import { PLAN_INFO } from '../types';
 import {
   buildRatingWeightsPayload,
   ClubModelWeights,
@@ -93,8 +94,9 @@ function UsersTab({ currentUserRole, clubId }: { currentUserRole: UserRole; club
     setLoading(true);
     let query = supabase.from('profiles').select('*').order('created_at', { ascending: true });
     if (clubId) query = query.eq('club_id', clubId);
+    query = query.neq('role', 'SUPERADMIN');
     const { data, error } = await query;
-    if (!error && data) setProfiles(data as Profile[]);
+    if (!error && data) setProfiles((data as Profile[]).filter(profile => profile.role !== 'SUPERADMIN'));
     setLoading(false);
   };
 
@@ -833,6 +835,7 @@ export function SettingsPanel({
   const [tertiaryColor, setTertiaryColor] = useState('#f59e0b');
   const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState('trial');
+  const [planType, setPlanType] = useState<PlanType>('basico');
   const [subscriptionStartDate, setSubscriptionStartDate] = useState('');
   const [subscriptionEndDate, setSubscriptionEndDate] = useState('');
   const [contractDuration, setContractDuration] = useState<ContractDuration>(12);
@@ -916,6 +919,7 @@ export function SettingsPanel({
         setTertiaryColor(club.tertiary_color || '#f59e0b');
         setBackgroundPreview(club.background_image_url || null);
         setSubscriptionStatus(club.subscription_status || 'trial');
+        setPlanType((club.plan_type as PlanType) || 'basico');
         setSubscriptionStartDate(club.subscription_start_date || '');
         setSubscriptionEndDate(club.subscription_end_date || '');
         const savedLength = Array.isArray(club.payment_log) ? club.payment_log.length : 12;
@@ -1016,6 +1020,7 @@ export function SettingsPanel({
       };
       if (isSuperAdmin) {
         payload.subscription_status = subscriptionStatus;
+        payload.plan_type = planType;
         payload.subscription_start_date = subscriptionStartDate || null;
         payload.subscription_end_date = subscriptionEndDate || null;
         payload.monthly_fee = Number(monthlyFee) || 0;
@@ -1028,6 +1033,19 @@ export function SettingsPanel({
         const { data, error: err } = await supabase.from('clients').insert([payload]).select().single();
         if (data) setClubId(data.id);
         error = err;
+      }
+      if (error?.message?.includes('plan_type')) {
+        // `plan_type` es una columna nueva: si la migración todavía no se
+        // ejecutó en Supabase, reintentamos sin ese campo para no bloquear
+        // el guardado del resto de datos del club.
+        const { plan_type: _pt, ...fallbackPayload } = payload;
+        if (clubId) {
+          ({ error } = await supabase.from('clients').update(fallbackPayload).eq('id', clubId));
+        } else {
+          const { data, error: err } = await supabase.from('clients').insert([fallbackPayload]).select().single();
+          if (data) setClubId(data.id);
+          error = err;
+        }
       }
       if (error) throw error;
       alert('Información del club actualizada correctamente.');
@@ -1136,12 +1154,23 @@ export function SettingsPanel({
     }
   };
 
-  const tabs = [
-    { id: 'usuarios', label: 'Usuarios y Roles', icon: Users },
-    { id: 'club', label: 'Configuración Club', icon: Shield },
-    { id: 'ratings', label: 'Pesos Valoración', icon: Sliders },
-    { id: 'database', label: 'Base de Datos', icon: Database },
-  ];
+  const tabs = isSuperAdmin
+    ? [
+        { id: 'usuarios', label: 'Usuarios y Roles', icon: Users },
+        { id: 'club', label: 'Configuración Club', icon: Shield },
+        { id: 'ratings', label: 'Pesos Valoración', icon: Sliders },
+        { id: 'database', label: 'Base de Datos', icon: Database },
+      ]
+    : [
+        { id: 'usuarios', label: 'Usuarios y Roles', icon: Users },
+        { id: 'ratings', label: 'Pesos Valoración', icon: Sliders },
+      ];
+
+  useEffect(() => {
+    if (!tabs.some(tab => tab.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [activeTab, tabs]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -1334,6 +1363,47 @@ export function SettingsPanel({
               {isSuperAdmin && (
                 <div className="space-y-3 p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
                   <label className="text-xs font-black text-emerald-400 uppercase tracking-widest px-1">Suscripción (solo tú la ves)</label>
+
+                  {/* ── Versión contratada ── */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Versión contratada</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {(Object.keys(PLAN_INFO) as PlanType[]).map(plan => {
+                        const info = PLAN_INFO[plan];
+                        const selected = planType === plan;
+                        return (
+                          <button
+                            key={plan}
+                            type="button"
+                            onClick={() => setPlanType(plan)}
+                            className={cn(
+                              "flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all active:scale-95",
+                              selected
+                                ? "border-emerald-500 bg-emerald-500/10"
+                                : "border-slate-800 bg-slate-950 hover:border-slate-600"
+                            )}
+                          >
+                            <span className={cn(
+                              "w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
+                              selected ? "bg-emerald-500 border-emerald-500" : "border-slate-600"
+                            )}>
+                              {selected && <Check size={15} strokeWidth={3.5} className="text-slate-950" />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className={cn("block text-xs font-black uppercase tracking-wide", selected ? "text-emerald-300" : "text-slate-300")}>
+                                {info.label}
+                              </span>
+                              <span className="block text-[10px] text-slate-500">{info.description}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-500 px-1 leading-relaxed">
+                      El límite de usuarios se aplica automáticamente: si el club ya supera el límite del plan elegido, la base de datos rechazará el cambio al guardar.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
                     <div className="space-y-1.5 flex flex-col">
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-h-[16px] flex items-end">Estado</span>

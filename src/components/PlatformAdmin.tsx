@@ -1,10 +1,11 @@
 import type React from 'react';
 import { useState, useRef, useEffect } from 'react';
-import { Building2, Upload, Loader2, CheckCircle, AlertCircle, Copy, Eye, EyeOff, Users as UsersIcon, Pencil, Ban, RotateCcw } from 'lucide-react';
+import { Building2, Upload, Loader2, CheckCircle, AlertCircle, Copy, Eye, EyeOff, Users as UsersIcon, Pencil, Ban, RotateCcw, Check } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
-import type { Client } from '../types';
+import type { Client, PlanType } from '../types';
+import { PLAN_INFO } from '../types';
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   active:  { label: 'Activa',   color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
@@ -61,7 +62,13 @@ function ClubOverviewList({ onSelectClub }: { onSelectClub: (clubId: string) => 
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-slate-200 text-sm truncate">{c.name}</p>
                 <p className="text-[11px] text-slate-500 flex items-center gap-x-3 gap-y-1 flex-wrap">
-                  <span className="flex items-center gap-1"><UsersIcon size={11} /> {userCounts[c.id] || 0} usuarios</span>
+                  <span className="flex items-center gap-1">
+                    <UsersIcon size={11} /> {userCounts[c.id] || 0}
+                    {PLAN_INFO[(c.plan_type as PlanType) || 'basico'].maxUsers !== null
+                      ? `/${PLAN_INFO[(c.plan_type as PlanType) || 'basico'].maxUsers}`
+                      : ''} usuarios
+                  </span>
+                  <span className="text-sky-400 font-bold uppercase">{PLAN_INFO[(c.plan_type as PlanType) || 'basico'].label}</span>
                   {c.subscription_end_date && <span>Hasta {c.subscription_end_date}</span>}
                   {c.monthly_fee ? <span>{c.monthly_fee}€/mes</span> : null}
                 </p>
@@ -136,6 +143,7 @@ export function PlatformAdmin({ onViewClub }: PlatformAdminProps) {
   const [clubName, setClubName] = useState('');
   const [season, setSeason] = useState('2026/2027');
   const [monthlyFee, setMonthlyFee] = useState('49');
+  const [planType, setPlanType] = useState<PlanType>('basico');
   const [primaryColor, setPrimaryColor] = useState('#10b981');
   const [secondaryColor, setSecondaryColor] = useState('#0f172a');
   const [tertiaryColor, setTertiaryColor] = useState('#f59e0b');
@@ -159,6 +167,7 @@ export function PlatformAdmin({ onViewClub }: PlatformAdminProps) {
     setClubName('');
     setSeason('2026/2027');
     setMonthlyFee('49');
+    setPlanType('basico');
     setPrimaryColor('#10b981');
     setSecondaryColor('#0f172a');
     setTertiaryColor('#f59e0b');
@@ -205,13 +214,22 @@ export function PlatformAdmin({ onViewClub }: PlatformAdminProps) {
         secondary_color: secondaryColor,
         tertiary_color: tertiaryColor,
         subscription_status: 'active',
+        plan_type: planType,
         subscription_start_date: new Date().toISOString().slice(0, 10),
         subscription_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
         monthly_fee: Number(monthlyFee) || 0,
       };
 
-      const { data: club, error: clubErr } = await supabase
+      let { data: club, error: clubErr } = await supabase
         .from('clients').insert([clientPayload]).select().single();
+      if (clubErr?.message?.includes('plan_type')) {
+        // `plan_type` es una columna nueva: si la migración todavía no se
+        // ejecutó en Supabase, reintentamos sin ese campo para no bloquear
+        // la creación del club.
+        const { plan_type: _pt, ...fallbackPayload } = clientPayload;
+        ({ data: club, error: clubErr } = await supabase
+          .from('clients').insert([fallbackPayload]).select().single());
+      }
       if (clubErr) throw clubErr;
       if (!club) throw new Error('No se pudo crear el club.');
 
@@ -300,6 +318,43 @@ export function PlatformAdmin({ onViewClub }: PlatformAdminProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 space-y-6">
+        {/* Versión contratada */}
+        <section className="space-y-4">
+          <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Versión contratada</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {(Object.keys(PLAN_INFO) as PlanType[]).map(plan => {
+              const info = PLAN_INFO[plan];
+              const selected = planType === plan;
+              return (
+                <button
+                  key={plan}
+                  type="button"
+                  onClick={() => setPlanType(plan)}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all active:scale-95",
+                    selected
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-800 bg-slate-950 hover:border-slate-600"
+                  )}
+                >
+                  <span className={cn(
+                    "w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
+                    selected ? "bg-emerald-500 border-emerald-500" : "border-slate-600"
+                  )}>
+                    {selected && <Check size={15} strokeWidth={3.5} className="text-slate-950" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={cn("block text-xs font-black uppercase tracking-wide", selected ? "text-emerald-300" : "text-slate-300")}>
+                      {info.label}
+                    </span>
+                    <span className="block text-[10px] text-slate-500">{info.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Datos del club */}
         <section className="space-y-4">
           <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Datos del club</p>

@@ -31,6 +31,7 @@ export interface Club {
   location?: string;
   province?: string;
   autonomous_community?: string;
+  country?: string;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +41,15 @@ export interface PaymentEntry {
   paid: boolean;        // ¿Pagado este mes?
   paid_date?: string | null; // Fecha real en que se registró el pago (YYYY-MM-DD)
 }
+
+// Versión contratada: define el máximo de usuarios activos del club-cliente.
+export type PlanType = 'particular' | 'basico' | 'premium';
+
+export const PLAN_INFO: Record<PlanType, { label: string; maxUsers: number | null; description: string }> = {
+  particular: { label: 'Particular',  maxUsers: 1,    description: '1 único usuario' },
+  basico:     { label: 'Club Básico', maxUsers: 9,    description: 'Hasta 9 usuarios' },
+  premium:    { label: 'Premium',     maxUsers: null, description: 'Usuarios ilimitados' },
+};
 
 // Un club-cliente que paga la suscripción a la plataforma (tabla "clients").
 // Totalmente independiente del catálogo de clubes reales (`Club`).
@@ -54,6 +64,7 @@ export interface Client {
   tertiary_color?: string | null;
   location?: string | null;
   subscription_status?: 'trial' | 'active' | 'expired';
+  plan_type?: PlanType;
   subscription_start_date?: string | null;
   subscription_end_date?: string | null;
   monthly_fee?: number | null;
