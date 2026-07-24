@@ -17,6 +17,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { PlatformAdmin } from './components/PlatformAdmin';
 import { Comparativas } from './components/Comparativas';
 import { LoginPage } from './components/LoginPage';
+import { MyBestTeam } from './components/MyBestTeam';
 import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
@@ -1328,6 +1329,8 @@ export default function App() {
         />;
       case 'comparativas':
         return <Comparativas players={scopedPlayers} userRole={userRole} canPrint={canPrint} />;
+      case 'mbt':
+        return <MyBestTeam players={scopedPlayers} onSelectPlayer={handleSelectPlayer} />;
       case 'settings':
       case 'users':
         return <SettingsPanel

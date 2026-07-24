@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair, Building2, KeyRound } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Shield, Settings, LogOut, ChevronRight, Trophy, Crosshair, Building2, KeyRound, LayoutTemplate } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn, getRoleLabel } from '../lib/utils';
 import type { Profile, Client } from '../types';
@@ -79,6 +79,7 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, ro
     { id: 'dashboard',    label: 'Dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
     { id: 'players',      label: 'Jugadores', icon: Users,           roles: ALL_ROLES },
     { id: 'comparativas', label: 'Comparar',  icon: Crosshair,       roles: SCOUTS_AND_UP },
+    { id: 'mbt',          label: 'MBT',       icon: LayoutTemplate,  roles: ALL_ROLES },
     { id: 'matches',      label: 'Agenda',    icon: Trophy,          roles: ALL_ROLES },
     { id: 'reports',      label: 'Archivo',   icon: ClipboardList,   roles: ALL_ROLES },
     { id: 'teams',        label: 'Clubes',    icon: Shield,          roles: ['ADMIN', 'COORD', 'COORD_F11', 'COORD_F8', 'SUPERADMIN'] },

@@ -13,6 +13,7 @@ type ClubCard = {
   location?: string;
   province?: string;
   autonomous_community?: string;
+  country?: string;
   logo_url?: string;
   categories: CategoryStat[];
   total_players: number;
@@ -44,6 +45,7 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
   const [cityFilter, setCityFilter] = useState('');
   const [provinceFilter, setProvinceFilter] = useState('');
   const [communityFilter, setCommunityFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
 
   useEffect(() => {
     fetchClubs();
@@ -78,16 +80,17 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
     setLoading(true);
     try {
       // 1. Fetch ALL clubs from the clubs table (including those without players).
-      //    `province`/`autonomous_community` son columnas nuevas: si la migración
-      //    todavía no se ejecutó en Supabase, la consulta falla con "column does
-      //    not exist" y se reintenta sin esas columnas para no dejar la lista vacía.
+      //    `province`/`autonomous_community`/`country` son columnas nuevas: si la
+      //    migración todavía no se ejecutó en Supabase, la consulta falla con
+      //    "column does not exist" y se reintenta sin esas columnas para no
+      //    dejar la lista vacía.
       let clubsData: any[] | null = null;
       const extended = await supabase
         .from('clubs')
-        .select('id, name, location, province, autonomous_community, logo_url, ref_code')
+        .select('id, name, location, province, autonomous_community, country, logo_url, ref_code')
         .order('name', { ascending: true });
       if (extended.error) {
-        console.warn('Columnas province/autonomous_community no disponibles todavía en `clubs` (falta ejecutar la migración). Usando consulta básica.', extended.error);
+        console.warn('Columnas province/autonomous_community/country no disponibles todavía en `clubs` (falta ejecutar la migración). Usando consulta básica.', extended.error);
         const basic = await supabase
           .from('clubs')
           .select('id, name, location, logo_url, ref_code')
@@ -131,7 +134,7 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
 
       for (const [key, displayName] of displayNameByKey) {
         if (!registeredKeys.has(key)) {
-          (clubsData || []).push({ id: undefined as any, name: displayName, location: null, province: null, autonomous_community: null, logo_url: null, ref_code: null });
+          (clubsData || []).push({ id: undefined as any, name: displayName, location: null, province: null, autonomous_community: null, country: null, logo_url: null, ref_code: null });
         }
       }
 
@@ -147,6 +150,7 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
           location: c.location ?? undefined,
           province: (c as any).province ?? undefined,
           autonomous_community: (c as any).autonomous_community ?? undefined,
+          country: (c as any).country ?? undefined,
           logo_url: c.logo_url ?? undefined,
           categories,
           total_players: categories.reduce((s, cat) => s + cat.count, 0),
@@ -161,32 +165,56 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
     }
   };
 
-  // Filtro en cascada: Comunidad Autónoma → Provincia → Ciudad. Cada nivel
-  // solo ofrece las opciones compatibles con lo ya seleccionado en el nivel
-  // superior (si eliges Galicia como comunidad, no puede aparecer Madrid
-  // como provincia ni como ciudad).
-  const communityOptions = useMemo(() => (
-    Array.from(new Set(clubs.map(c => c.autonomous_community).filter(Boolean))).sort() as string[]
+  // Filtro en cascada: País → Comunidad Autónoma → Provincia → Ciudad. Cada
+  // nivel solo ofrece las opciones compatibles con lo ya seleccionado en el
+  // nivel superior (si eliges España como país y Galicia como comunidad, no
+  // puede aparecer Madrid ni como provincia ni como ciudad).
+  const countryOptions = useMemo(() => (
+    Array.from(new Set(clubs.map(c => c.country).filter(Boolean))).sort() as string[]
   ), [clubs]);
+
+  const communityOptions = useMemo(() => (
+    Array.from(new Set(
+      clubs
+        .filter(c => !countryFilter || c.country === countryFilter)
+        .map(c => c.autonomous_community)
+        .filter(Boolean)
+    )).sort() as string[]
+  ), [clubs, countryFilter]);
 
   const provinceOptions = useMemo(() => (
     Array.from(new Set(
       clubs
+        .filter(c => !countryFilter || c.country === countryFilter)
         .filter(c => !communityFilter || c.autonomous_community === communityFilter)
         .map(c => c.province)
         .filter(Boolean)
     )).sort() as string[]
-  ), [clubs, communityFilter]);
+  ), [clubs, countryFilter, communityFilter]);
 
   const cityOptions = useMemo(() => (
     Array.from(new Set(
       clubs
+        .filter(c => !countryFilter || c.country === countryFilter)
         .filter(c => !communityFilter || c.autonomous_community === communityFilter)
         .filter(c => !provinceFilter || c.province === provinceFilter)
         .map(c => c.location)
         .filter(Boolean)
     )).sort() as string[]
-  ), [clubs, communityFilter, provinceFilter]);
+  ), [clubs, countryFilter, communityFilter, provinceFilter]);
+
+  const handleCountryFilterChange = (value: string) => {
+    setCountryFilter(value);
+    if (communityFilter && !clubs.some(c => c.autonomous_community === communityFilter && (!value || c.country === value))) {
+      setCommunityFilter('');
+    }
+    if (provinceFilter && !clubs.some(c => c.province === provinceFilter && (!value || c.country === value))) {
+      setProvinceFilter('');
+    }
+    if (cityFilter && !clubs.some(c => c.location === cityFilter && (!value || c.country === value))) {
+      setCityFilter('');
+    }
+  };
 
   const handleCommunityFilterChange = (value: string) => {
     setCommunityFilter(value);
@@ -214,11 +242,12 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
     const matchesCity = cityFilter ? c.location === cityFilter : true;
     const matchesProvince = provinceFilter ? c.province === provinceFilter : true;
     const matchesCommunity = communityFilter ? c.autonomous_community === communityFilter : true;
-    return matchesSearch && matchesCity && matchesProvince && matchesCommunity;
+    const matchesCountry = countryFilter ? c.country === countryFilter : true;
+    return matchesSearch && matchesCity && matchesProvince && matchesCommunity && matchesCountry;
   });
 
-  const hasActiveFilters = !!(cityFilter || provinceFilter || communityFilter);
-  const clearFilters = () => { setCityFilter(''); setProvinceFilter(''); setCommunityFilter(''); };
+  const hasActiveFilters = !!(cityFilter || provinceFilter || communityFilter || countryFilter);
+  const clearFilters = () => { setCityFilter(''); setProvinceFilter(''); setCommunityFilter(''); setCountryFilter(''); };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -297,8 +326,16 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
         </div>
       </div>
 
-      {/* Filtros de posición geográfica, en cascada: Comunidad → Provincia → Ciudad */}
+      {/* Filtros de posición geográfica, en cascada: País → Comunidad → Provincia → Ciudad */}
       <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={countryFilter}
+          onChange={e => handleCountryFilterChange(e.target.value)}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 transition-colors"
+        >
+          <option value="">Todos los países</option>
+          {countryOptions.map(co => <option key={co} value={co}>{co}</option>)}
+        </select>
         <select
           value={communityFilter}
           onChange={e => handleCommunityFilterChange(e.target.value)}
@@ -375,7 +412,8 @@ export function ClubList({ onSelectClub, onViewPlayers, ownerClubId }: {
                   )}
                   {club.province && <span>{club.province}</span>}
                   {club.autonomous_community && <span className="text-slate-600">{club.autonomous_community}</span>}
-                  {!club.location && !club.province && !club.autonomous_community && (
+                  {club.country && <span className="text-slate-700">{club.country}</span>}
+                  {!club.location && !club.province && !club.autonomous_community && !club.country && (
                     <span className="italic text-slate-700">Sin localización</span>
                   )}
                 </div>

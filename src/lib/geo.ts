@@ -1,15 +1,17 @@
 /**
- * Resolución automática de Provincia y Comunidad Autónoma a partir del
- * nombre de una ciudad/localidad española.
+ * Resolución automática de País, Provincia y Comunidad Autónoma a partir del
+ * nombre de una ciudad/localidad.
  *
  * Estrategia en 2 fases:
  *  1. Tabla local (instantánea, sin red) con las capitales de provincia y
- *     los municipios ya usados en la app (sobre todo Galicia/Pontevedra).
+ *     los municipios ya usados en la app (sobre todo Galicia/Pontevedra),
+ *     todos ellos en España.
  *  2. Si la ciudad no está en la tabla local, se consulta la API pública y
  *     gratuita de geocodificación de OpenStreetMap (Nominatim) para
- *     resolverla igualmente, sin necesidad de API key.
+ *     resolverla igualmente, sin necesidad de API key — esto permite
+ *     detectar también ciudades de cualquier otro país.
  *
- * Así cualquier ciudad de España queda cubierta, escriba lo que escriba
+ * Así cualquier ciudad del mundo queda cubierta, escriba lo que escriba
  * el usuario en el campo "Ciudad".
  */
 
@@ -100,6 +102,7 @@ const CITY_TO_PROVINCE: Record<string, string> = {
 };
 
 export type GeoResolution = {
+  country: string | null;
   province: string | null;
   autonomous_community: string | null;
   source: 'local' | 'api' | null;
@@ -113,20 +116,21 @@ const communityForProvince = (province: string): string | null =>
 const geoCache = new Map<string, GeoResolution>();
 
 /**
- * Resuelve provincia y comunidad autónoma a partir del nombre de una ciudad.
- * Nunca lanza: si todo falla devuelve { province: null, autonomous_community: null }.
+ * Resuelve país, provincia y comunidad autónoma a partir del nombre de una
+ * ciudad. Nunca lanza: si todo falla devuelve los 3 campos a null.
  */
 export async function resolveProvinceAndCommunity(cityRaw: string): Promise<GeoResolution> {
   const city = (cityRaw || '').trim();
-  if (!city) return { province: null, autonomous_community: null, source: null };
+  if (!city) return { country: null, province: null, autonomous_community: null, source: null };
 
   const key = stripAccents(city);
   if (geoCache.has(key)) return geoCache.get(key)!;
 
-  // 1. Tabla local (instantánea)
+  // 1. Tabla local (instantánea) — todas las ciudades de esta tabla son de España.
   const localProvince = CITY_TO_PROVINCE[key];
   if (localProvince) {
     const result: GeoResolution = {
+      country: 'España',
       province: localProvince,
       autonomous_community: communityForProvince(localProvince),
       source: 'local',
@@ -135,13 +139,15 @@ export async function resolveProvinceAndCommunity(cityRaw: string): Promise<GeoR
     return result;
   }
 
-  // 2. Fallback: geocodificación gratuita vía Nominatim (OpenStreetMap), sin API key.
+  // 2. Fallback: geocodificación gratuita vía Nominatim (OpenStreetMap), sin
+  //    API key. Sin restringir el país, para poder detectar también clubes
+  //    de fuera de España.
   try {
     const url = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
-      q: `${city}, España`,
+      q: city,
       format: 'jsonv2',
       addressdetails: '1',
-      countrycodes: 'es',
+      'accept-language': 'es',
       limit: '1',
     })}`;
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -149,31 +155,31 @@ export async function resolveProvinceAndCommunity(cityRaw: string): Promise<GeoR
     const results = await response.json();
     const address = results?.[0]?.address;
     if (!address) {
-      const empty: GeoResolution = { province: null, autonomous_community: null, source: null };
+      const empty: GeoResolution = { country: null, province: null, autonomous_community: null, source: null };
       geoCache.set(key, empty);
       return empty;
     }
 
-    const community: string | null = address.state || null;
-    let province: string | null =
-      address.province || address.state_district || address.county || null;
-
-    // Si la comunidad es uniprovincial, la provincia coincide aunque la API
-    // no la devuelva explícitamente.
-    if (!province && community && COMMUNITY_TO_SINGLE_PROVINCE[community]) {
-      province = COMMUNITY_TO_SINGLE_PROVINCE[community];
+    const country: string | null = address.country || null;
+    // Provincia/Comunidad Autónoma solo aplica dentro de España.
+    let province: string | null = null;
+    let community: string | null = null;
+    if (country === 'España') {
+      community = address.state || null;
+      province = address.province || address.state_district || address.county || null;
+      // Si la comunidad es uniprovincial, la provincia coincide aunque la API
+      // no la devuelva explícitamente.
+      if (!province && community && COMMUNITY_TO_SINGLE_PROVINCE[community]) {
+        province = COMMUNITY_TO_SINGLE_PROVINCE[community];
+      }
     }
 
-    const result: GeoResolution = {
-      province,
-      autonomous_community: community,
-      source: 'api',
-    };
+    const result: GeoResolution = { country, province, autonomous_community: community, source: 'api' };
     geoCache.set(key, result);
     return result;
   } catch (err) {
     console.warn('No se pudo geocodificar la ciudad', city, err);
-    const empty: GeoResolution = { province: null, autonomous_community: null, source: null };
+    const empty: GeoResolution = { country: null, province: null, autonomous_community: null, source: null };
     geoCache.set(key, empty);
     return empty;
   }

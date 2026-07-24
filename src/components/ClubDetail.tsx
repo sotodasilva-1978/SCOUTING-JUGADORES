@@ -34,6 +34,7 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
   const [location, setLocation] = useState('');
   const [province, setProvince] = useState('');
   const [autonomousCommunity, setAutonomousCommunity] = useState('');
+  const [country, setCountry] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [categories, setCategories] = useState<CategoryStat[]>([]);
   const [saved, setSaved] = useState(false);
@@ -49,8 +50,8 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
     loadData();
   }, [clubName, ownerClubId]);
 
-  // Autogestiona Provincia y Comunidad Autónoma a partir de la Ciudad: al
-  // salir del campo Ciudad se resuelve automáticamente (tabla local de
+  // Autogestiona País, Provincia y Comunidad Autónoma a partir de la Ciudad:
+  // al salir del campo Ciudad se resuelve automáticamente (tabla local de
   // capitales/municipios conocidos y, si no está, geocodificación gratuita
   // vía OpenStreetMap/Nominatim). El usuario puede seguir corrigiendo el
   // resultado a mano si hiciera falta.
@@ -61,6 +62,7 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
     setDetectingGeo(true);
     try {
       const geo = await resolveProvinceAndCommunity(city);
+      if (geo.country) setCountry(geo.country);
       if (geo.province) setProvince(geo.province);
       if (geo.autonomous_community) setAutonomousCommunity(geo.autonomous_community);
     } finally {
@@ -77,15 +79,15 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
       // acentos/mayusculas/puntuacion) para que el escudo y la localizacion
       // configurados por un cliente aparezcan igual para todos, sin importar
       // cómo haya escrito el nombre del club cada uno.
-      // `province`/`autonomous_community` son columnas nuevas: si la migración
-      // todavía no se ejecutó en Supabase, la consulta falla y se reintenta
-      // sin esas columnas para no dejar el club sin datos.
+      // `province`/`autonomous_community`/`country` son columnas nuevas: si la
+      // migración todavía no se ejecutó en Supabase, la consulta falla y se
+      // reintenta sin esas columnas para no dejar el club sin datos.
       let allClubs: any[] | null = null;
       const extended = await supabase
         .from('clubs')
-        .select('id, name, location, province, autonomous_community, logo_url');
+        .select('id, name, location, province, autonomous_community, country, logo_url');
       if (extended.error) {
-        console.warn('Columnas province/autonomous_community no disponibles todavía en `clubs` (falta ejecutar la migración). Usando consulta básica.', extended.error);
+        console.warn('Columnas province/autonomous_community/country no disponibles todavía en `clubs` (falta ejecutar la migración). Usando consulta básica.', extended.error);
         const basic = await supabase
           .from('clubs')
           .select('id, name, location, logo_url');
@@ -118,6 +120,7 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
         setLocation(clubData.location || '');
         setProvince((clubData as any).province || '');
         setAutonomousCommunity((clubData as any).autonomous_community || '');
+        setCountry((clubData as any).country || '');
         setLogoUrl(clubData.logo_url || null);
         lastDetectedCity.current = clubData.location || '';
       } else {
@@ -126,6 +129,7 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
         setLocation('');
         setProvince('');
         setAutonomousCommunity('');
+        setCountry('');
         setLogoUrl(null);
         lastDetectedCity.current = '';
       }
@@ -228,19 +232,20 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
         location: location.trim() || null,
         province: province.trim() || null,
         autonomous_community: autonomousCommunity.trim() || null,
+        country: country.trim() || null,
         logo_url: logoUrl || null,
         current_season: '2026/2027',
         updated_at: new Date().toISOString(),
       };
 
-      // `province`/`autonomous_community` son columnas nuevas: si la migración
-      // aún no se ejecutó en Supabase, el update/insert falla; se reintenta
-      // sin esos dos campos para no bloquear el guardado del resto de datos.
+      // `province`/`autonomous_community`/`country` son columnas nuevas: si la
+      // migración aún no se ejecutó en Supabase, el update/insert falla; se
+      // reintenta sin esos campos para no bloquear el guardado del resto de datos.
       const updateClub = async (id: string) => {
         const { error } = await supabase.from('clubs').update(payload).eq('id', id);
         if (error) {
-          console.warn('No se pudieron guardar province/autonomous_community (falta ejecutar la migración). Reintentando sin esos campos.', error);
-          const { province: _p, autonomous_community: _ac, ...fallbackPayload } = payload;
+          console.warn('No se pudieron guardar province/autonomous_community/country (falta ejecutar la migración). Reintentando sin esos campos.', error);
+          const { province: _p, autonomous_community: _ac, country: _c, ...fallbackPayload } = payload;
           await supabase.from('clubs').update(fallbackPayload).eq('id', id);
         }
       };
@@ -256,6 +261,7 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
           location: payload.location,
           province: payload.province,
           autonomous_community: payload.autonomous_community,
+          country: payload.country,
           logo_url: payload.logo_url,
         });
         if (!club) {
@@ -425,8 +431,21 @@ export function ClubDetail({ clubName, onBack, ownerClubId }: Props) {
               />
             </div>
             <p className="text-[10px] text-slate-600 px-1">
-              Provincia y Comunidad Autónoma se rellenan solas al escribir la ciudad.
+              País, Provincia y Comunidad Autónoma se rellenan solos al escribir la ciudad.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1 flex items-center gap-1.5">
+              País
+              {detectingGeo && <Loader2 size={10} className="animate-spin text-emerald-500" />}
+            </label>
+            <input
+              value={country}
+              onChange={e => setCountry(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500/50 transition-colors"
+              placeholder="Autodetectado al escribir la ciudad..."
+            />
           </div>
 
           <div className="space-y-2">
