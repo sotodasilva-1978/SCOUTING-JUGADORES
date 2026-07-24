@@ -98,7 +98,7 @@ function PitchBoard({
   const penaltyArcOffset = 57;
 
   return (
-    <div className="relative h-[840px] rounded-[1.8rem] overflow-hidden border border-emerald-200/12 bg-[#0b2825] shadow-[0_30px_100px_rgba(2,8,10,0.55),inset_0_0_0_1px_rgba(255,255,255,0.03)]">
+    <div className="relative h-[840px] w-[1040px] min-w-[1040px] rounded-[1.8rem] overflow-hidden border border-emerald-200/12 bg-[#0b2825] shadow-[0_30px_100px_rgba(2,8,10,0.55),inset_0_0_0_1px_rgba(255,255,255,0.03)]">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,_#113e39_0%,_#0e3531_48%,_#0b2b28_100%)]" />
         <div className="absolute inset-0 opacity-50 bg-[repeating-linear-gradient(90deg,_rgba(255,255,255,0.035)_0px,_rgba(255,255,255,0.035)_30px,_rgba(255,255,255,0.012)_30px,_rgba(255,255,255,0.012)_60px)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_transparent_48%)]" />
@@ -235,15 +235,15 @@ const FORMATIONS: FormationDefinition[] = [
     label: '4-2-3-1',
     slots: [
       { id: 'gk', label: 'POR', x: 50, y: 89, positions: ['POR'] },
-      { id: 'lb', label: 'LI', x: 16, y: 72, positions: ['LI'] },
-      { id: 'lcb', label: 'DFC', x: 36, y: 73, positions: ['DFC', 'DF'] },
-      { id: 'rcb', label: 'DFC', x: 64, y: 73, positions: ['DFC', 'DF'] },
-      { id: 'rb', label: 'LD', x: 84, y: 72, positions: ['LD'] },
-      { id: 'dm1', label: 'MC', x: 36, y: 53, positions: ['MC'] },
-      { id: 'dm2', label: 'MC', x: 64, y: 53, positions: ['MC'] },
-      { id: 'lw', label: 'EI', x: 18, y: 34, positions: ['EI'] },
+      { id: 'lb', label: 'LI', x: 24, y: 72, positions: ['LI'] },
+      { id: 'lcb', label: 'DFC', x: 41, y: 73, positions: ['DFC', 'DF'] },
+      { id: 'rcb', label: 'DFC', x: 59, y: 73, positions: ['DFC', 'DF'] },
+      { id: 'rb', label: 'LD', x: 76, y: 72, positions: ['LD'] },
+      { id: 'dm1', label: 'MC', x: 41, y: 53, positions: ['MC'] },
+      { id: 'dm2', label: 'MC', x: 59, y: 53, positions: ['MC'] },
+      { id: 'lw', label: 'EI', x: 26, y: 34, positions: ['EI'] },
       { id: 'cam', label: 'MCO', x: 50, y: 33, positions: ['MCO'] },
-      { id: 'rw', label: 'ED', x: 82, y: 34, positions: ['ED'] },
+      { id: 'rw', label: 'ED', x: 74, y: 34, positions: ['ED'] },
       { id: 'st', label: 'DC', x: 50, y: 15, positions: ['DC', 'SD'] },
     ],
   },
@@ -526,7 +526,7 @@ export function MyBestTeam({
           </h2>
         </div>
 
-        <div className="p-4">
+        <div className="overflow-x-auto overflow-y-hidden p-4 [touch-action:pan-x_pan-y]">
           <PitchBoard slotBoards={slotBoards} onSelectPlayer={onSelectPlayer} metric={metric} />
         </div>
       </section>
