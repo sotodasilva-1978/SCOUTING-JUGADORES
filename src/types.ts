@@ -36,6 +36,15 @@ export interface Club {
   updated_at: string;
 }
 
+export interface ClientClubVisibility {
+  id: string;
+  client_id: string;
+  club_id: string;
+  is_visible: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Registro de un pago mensual dentro del ciclo anual de suscripción.
 export interface PaymentEntry {
   paid: boolean;        // ¿Pagado este mes?
@@ -299,6 +308,7 @@ export interface Player {
 
 export interface Match {
   id: string;
+  owner_club_id?: string | null;
   date: string;
   home_team: string;
   away_team: string;

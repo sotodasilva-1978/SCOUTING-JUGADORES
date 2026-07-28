@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE TABLE IF NOT EXISTS players (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   club_id UUID REFERENCES clubs(id),
+  owner_club_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   first_name TEXT NOT NULL,
   last_name TEXT,
   full_name TEXT NOT NULL,
@@ -179,6 +180,7 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS strengths TEXT[] DEFAULT '{}';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS weaknesses TEXT[] DEFAULT '{}';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS last_name TEXT;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS club_id UUID;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS owner_club_id UUID;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS current_team_id UUID;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS created_by UUID;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS validated_by UUID;
@@ -269,6 +271,7 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS next_step TEXT;
 -- ==========================
 CREATE TABLE IF NOT EXISTS matches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_club_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   date TIMESTAMPTZ NOT NULL,
   home_team TEXT NOT NULL,
   away_team TEXT NOT NULL,
@@ -369,6 +372,24 @@ CREATE TABLE IF NOT EXISTS rating_weights (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS owner_club_id UUID;
+
+-- ==========================
+-- TABLA: visibilidad de clubes por cliente
+-- ==========================
+CREATE TABLE IF NOT EXISTS client_club_visibility (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  club_id UUID NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+  is_visible BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT client_club_visibility_unique UNIQUE (client_id, club_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_club_visibility_client ON client_club_visibility(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_club_visibility_club ON client_club_visibility(club_id);
+
 -- ==========================
 -- COLUMNA location en clubs (para estructura de clubes)
 -- ==========================
@@ -411,6 +432,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE reports DISABLE ROW LEVEL SECURITY;
 ALTER TABLE videos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE rating_weights DISABLE ROW LEVEL SECURITY;
+ALTER TABLE client_club_visibility DISABLE ROW LEVEL SECURITY;
 
 -- ==========================
 -- TRIGGER updated_at para players

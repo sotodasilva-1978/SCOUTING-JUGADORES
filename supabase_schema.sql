@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE TABLE IF NOT EXISTS players (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   club_id UUID REFERENCES clubs(id),
+  owner_club_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   first_name TEXT NOT NULL,
   last_name TEXT,
   full_name TEXT NOT NULL,
@@ -225,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_player_career_entries_club ON player_career_entri
 
 CREATE TABLE IF NOT EXISTS matches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_club_id UUID REFERENCES clients(id) ON DELETE SET NULL,
   date TIMESTAMPTZ NOT NULL,
   home_team TEXT NOT NULL,
   away_team TEXT NOT NULL,
@@ -309,6 +311,19 @@ CREATE TABLE IF NOT EXISTS rating_weights (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS client_club_visibility (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  club_id UUID NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+  is_visible BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT client_club_visibility_unique UNIQUE (client_id, club_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_club_visibility_client ON client_club_visibility(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_club_visibility_club ON client_club_visibility(club_id);
+
 -- Create Triggers for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -328,6 +343,8 @@ DROP TRIGGER IF EXISTS update_players_updated_at ON players;
 CREATE TRIGGER update_players_updated_at BEFORE UPDATE ON players FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 DROP TRIGGER IF EXISTS update_player_career_entries_updated_at ON player_career_entries;
 CREATE TRIGGER update_player_career_entries_updated_at BEFORE UPDATE ON player_career_entries FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+DROP TRIGGER IF EXISTS update_client_club_visibility_updated_at ON client_club_visibility;
+CREATE TRIGGER update_client_club_visibility_updated_at BEFORE UPDATE ON client_club_visibility FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- Enable RLS on all tables
 ALTER TABLE clubs ENABLE ROW LEVEL SECURITY;
@@ -341,6 +358,7 @@ ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE history_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rating_weights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE client_club_visibility ENABLE ROW LEVEL SECURITY;
 
 -- Basic Policies (example for scouts)
 DROP POLICY IF EXISTS "Scouts can read all players" ON players;
@@ -380,6 +398,15 @@ DROP POLICY IF EXISTS "Allow public insert on rating_weights" ON rating_weights;
 CREATE POLICY "Allow public insert on rating_weights" ON rating_weights FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update on rating_weights" ON rating_weights;
 CREATE POLICY "Allow public update on rating_weights" ON rating_weights FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Allow read client club visibility" ON client_club_visibility;
+CREATE POLICY "Allow read client club visibility" ON client_club_visibility FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow insert client club visibility" ON client_club_visibility;
+CREATE POLICY "Allow insert client club visibility" ON client_club_visibility FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update client club visibility" ON client_club_visibility;
+CREATE POLICY "Allow update client club visibility" ON client_club_visibility FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow delete client club visibility" ON client_club_visibility;
+CREATE POLICY "Allow delete client club visibility" ON client_club_visibility FOR DELETE USING (true);
 
 -- Policies for reports
 DROP POLICY IF EXISTS "Allow public read on reports" ON reports;

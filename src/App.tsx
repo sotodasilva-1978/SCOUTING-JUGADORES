@@ -22,6 +22,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { Player, Match, Report, Video, HistoryLog, Profile, UserRole, Client } from './types';
 import { supabase, signOut, getOrCreateProfile } from './lib/supabase';
 import { findOrCreateClub } from './lib/clubs';
+import { fetchVisibleClubNames } from './lib/clubVisibility';
 import { computeAge, calculateCategory, isF11Category, isF8Category, parseDictatedList } from './lib/utils';
 import {
   applyClubModelToPlayer,
@@ -148,22 +149,7 @@ export default function App() {
   // plataforma), para que los desplegables de selección de equipo (p.ej. al
   // crear un partido) muestren TODOS los clubes existentes y no solo los que
   // ya tienen jugadores seguidos por este club/entrenador.
-  useEffect(() => {
-    if (!userProfile) return;
-    supabase
-      .from('clubs')
-      .select('name')
-      .order('name', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('Error al cargar catálogo de clubes:', error);
-          return;
-        }
-        setClubsCatalogNames((data || []).map((c: { name: string }) => c.name).filter(Boolean));
-      });
-  }, [userProfile?.user_id]);
-
-  useEffect(() => {
+    useEffect(() => {
     if (!effectiveClubId) { setClient(null); return; }
     supabase
       .from('clients')
@@ -172,6 +158,17 @@ export default function App() {
       .maybeSingle()
       .then(({ data }) => setClient(data as Client | null));
   }, [effectiveClubId]);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    fetchVisibleClubNames(effectiveClubId)
+      .then((names) => {
+        setClubsCatalogNames(names.filter(Boolean));
+      })
+      .catch((error) => {
+        console.error('Error al cargar catÃ¡logo visible de clubes:', error);
+      });
+  }, [userProfile?.user_id, effectiveClubId]);
 
   useEffect(() => {
     if (userRole !== 'SUPERADMIN') { setAllClients([]); return; }
@@ -196,11 +193,8 @@ export default function App() {
   // catálogo global de clubes (tabla `clubs`) con los nombres ya usados por
   // jugadores (por si algún club_name no coincide exactamente con el catálogo).
   const allClubNames = useMemo(() => (
-    Array.from(new Set([
-      ...clubsCatalogNames,
-      ...players.map(p => p.club_name).filter(Boolean),
-    ])).sort() as string[]
-  ), [clubsCatalogNames, players]);
+    Array.from(new Set(clubsCatalogNames)).sort() as string[]
+  ), [clubsCatalogNames]);
 
   // Jugadores filtrados según rol
   const scopedPlayers = useMemo(() => {
@@ -404,7 +398,7 @@ export default function App() {
       'tactical_profile', 'physical_profile', 'mental_profile', 'birth_place', 'passport',
       'agent_name', 'weight_kg', 'info_source', 'general_observations', 'verification_status',
       'contact_own', 'contact_tutor1', 'contact_tutor1_role', 'contact_other', 'contact_other_role',
-      'created_by', 'decision_final', 'decision_date', 'possible_duplicate'
+      'created_by', 'owner_club_id', 'decision_final', 'decision_date', 'possible_duplicate'
     ];
 
     const cleaned: any = {};
@@ -631,6 +625,7 @@ export default function App() {
         has_images: false,
         possible_duplicate: false,
         created_by: '',
+        owner_club_id: effectiveClubId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -783,6 +778,7 @@ export default function App() {
   const handleSaveMatch = async (matchData: any) => {
     const newMatch: Match = {
       id: crypto.randomUUID(),
+      owner_club_id: effectiveClubId,
       date: matchData.date || new Date().toISOString(),
       home_team: matchData.home_team,
       away_team: matchData.away_team,
